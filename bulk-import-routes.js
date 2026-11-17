@@ -1,5 +1,6 @@
 'use strict';
 const { Router } = require('express');
+const { createWorker } = require('./import-worker');
 const ALLOWED = new Set(['AliExpress','CJ Dropshipping','DSLite','Outro']);
 function identify(url) {
   const host = new URL(url).hostname.toLowerCase();
@@ -18,6 +19,9 @@ function validate(raw) {
 }
 module.exports = pool => {
   const r = Router();
+  const worker = createWorker(pool);
+  r.post('/processar',async(req,res,next)=>{try{res.json(await worker.start())}catch(e){next(e)}});
+  r.get('/processamento',(req,res)=>res.json(worker.status()));
   r.post('/lotes', async (req,res,next) => {
     try {
       const { urls, fornecedor = 'auto' } = req.body || {};
