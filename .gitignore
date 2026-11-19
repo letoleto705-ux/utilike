@@ -1,2 +1,3 @@
 .env
 dados_garimpagem
+__pycache__
