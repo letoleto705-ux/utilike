@@ -13,7 +13,12 @@
     "preco_status": "revisao_preco_ambiguo_ou_ausente",
     "frete_status": "frete_nao_confirmado",
     "frete_observado": null,
-    "frete_texto": ""
+    "frete_texto": "",
+    "origem_envio": null,
+    "origem_envio_texto": null,
+    "disponibilidade_status": null,
+    "estoque_observado": null,
+    "estoque_texto": null
   },
   {
     "url": "https://pt.aliexpress.com/item/1005010248866062.html",
@@ -29,7 +34,12 @@
     "preco_status": "revisao_preco_ambiguo_ou_ausente",
     "frete_status": "frete_nao_confirmado",
     "frete_observado": null,
-    "frete_texto": ""
+    "frete_texto": "",
+    "origem_envio": null,
+    "origem_envio_texto": null,
+    "disponibilidade_status": null,
+    "estoque_observado": null,
+    "estoque_texto": null
   },
   {
     "url": "https://pt.aliexpress.com/item/1005010158780648.html",
@@ -44,7 +54,12 @@
     "preco_status": "revisao_preco_ambiguo_ou_ausente",
     "frete_status": null,
     "frete_observado": null,
-    "frete_texto": null
+    "frete_texto": null,
+    "origem_envio": null,
+    "origem_envio_texto": null,
+    "disponibilidade_status": null,
+    "estoque_observado": null,
+    "estoque_texto": null
   },
   {
     "url": "https://pt.aliexpress.com/item/1005013633838024.html",
@@ -59,7 +74,12 @@
     "preco_status": "revisao_preco_ambiguo_ou_ausente",
     "frete_status": null,
     "frete_observado": null,
-    "frete_texto": null
+    "frete_texto": null,
+    "origem_envio": null,
+    "origem_envio_texto": null,
+    "disponibilidade_status": null,
+    "estoque_observado": null,
+    "estoque_texto": null
   },
   {
     "url": "https://pt.aliexpress.com/item/1005010089107755.html",
@@ -74,7 +94,12 @@
     "preco_status": "revisao_preco_ambiguo_ou_ausente",
     "frete_status": null,
     "frete_observado": null,
-    "frete_texto": null
+    "frete_texto": null,
+    "origem_envio": null,
+    "origem_envio_texto": null,
+    "disponibilidade_status": null,
+    "estoque_observado": null,
+    "estoque_texto": null
   },
   {
     "url": "https://pt.aliexpress.com/item/1005013087311811.html",
@@ -84,7 +109,15 @@
     "captura_imagens": "nao_verificado",
     "preco_observado": null,
     "moeda_observada": null,
-    "preco_status": "nao_verificado"
+    "preco_status": "nao_verificado",
+    "frete_status": null,
+    "frete_observado": null,
+    "frete_texto": null,
+    "origem_envio": null,
+    "origem_envio_texto": null,
+    "disponibilidade_status": null,
+    "estoque_observado": null,
+    "estoque_texto": null
   },
   {
     "url": "https://pt.aliexpress.com/item/1005013105908066.html",
@@ -94,7 +127,15 @@
     "captura_imagens": "nao_verificado",
     "preco_observado": null,
     "moeda_observada": null,
-    "preco_status": "nao_verificado"
+    "preco_status": "nao_verificado",
+    "frete_status": null,
+    "frete_observado": null,
+    "frete_texto": null,
+    "origem_envio": null,
+    "origem_envio_texto": null,
+    "disponibilidade_status": null,
+    "estoque_observado": null,
+    "estoque_texto": null
   },
   {
     "url": "https://pt.aliexpress.com/item/1005012766060753.html",
@@ -104,11 +145,37 @@
     "captura_imagens": "nao_verificado",
     "preco_observado": null,
     "moeda_observada": null,
-    "preco_status": "nao_verificado"
+    "preco_status": "nao_verificado",
+    "frete_status": null,
+    "frete_observado": null,
+    "frete_texto": null,
+    "origem_envio": null,
+    "origem_envio_texto": null,
+    "disponibilidade_status": null,
+    "estoque_observado": null,
+    "estoque_texto": null
   },
   {
     "url": "https://pt.aliexpress.com/item/1005006191602162.html",
     "categoria": "Eletrônicos",
+    "imagens": [],
+    "titulo": "",
+    "captura_imagens": "nao_verificado",
+    "preco_observado": null,
+    "moeda_observada": null,
+    "preco_status": "nao_verificado",
+    "frete_status": null,
+    "frete_observado": null,
+    "frete_texto": null,
+    "origem_envio": null,
+    "origem_envio_texto": null,
+    "disponibilidade_status": null,
+    "estoque_observado": null,
+    "estoque_texto": null
+  },
+  {
+    "url": "https://pt.aliexpress.com/item/1005006066419334.html",
+    "categoria": "Beleza e cuidados",
     "imagens": [],
     "titulo": "",
     "captura_imagens": "nao_verificado",
