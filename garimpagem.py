@@ -79,7 +79,7 @@ def image_url(url):
 class App:
     def __init__(self, root):
         self.root=root
-        root.title('Uti Like | Garimpagem V7 (preços observados)')
+        root.title('Uti Like | Garimpagem V8 (preços observados)')
         root.geometry('1050x760');root.minsize(800,600)
         self.driver=None
         self.stop=threading.Event()
@@ -97,7 +97,7 @@ class App:
         self.status=tk.StringVar(value='Aguardando coleta')
         self.images_enabled=tk.BooleanVar(value=False)
         self.image_limit=tk.StringVar(value='10')
-        self.image_products=tk.StringVar(value='10')
+        self.image_products=tk.StringVar(value='0')
         self.only_products=tk.BooleanVar(value=True)
         self.percat={}
         # Ajuste exclusivamente visual: rolagem vertical para a janela inteira.
@@ -125,7 +125,7 @@ class App:
             except (tk.TclError, AttributeError):
                 pass
         root.bind_all('<MouseWheel>',page_wheel,add='+')
-        ttk.Label(shell,text='Garimpagem V6 (preços observados) — AliExpress',font=('Segoe UI',16,'bold')).pack(anchor='w')
+        ttk.Label(shell,text='Garimpagem V8 (preços observados) — AliExpress',font=('Segoe UI',16,'bold')).pack(anchor='w')
         ttk.Label(shell,text='Quantidade significa URLs por categoria. Imagens são URLs separadas das URLs dos produtos.').pack(anchor='w',pady=4)
         bar=ttk.Frame(shell);bar.pack(fill='x',pady=5)
         ttk.Label(bar,text='Página inicial:').pack(side='left')
@@ -158,8 +158,8 @@ class App:
         for label,cmd in [('Iniciar coleta por categoria',self.collect),('Parar',self.request_stop),('Salvar TXT/CSV',self.save),('Carregar progresso',self.load),('Capturar imagens dos produtos',self.capture_images),('Verificar preços',self.verify_prices)]:
             ttk.Button(controls,text=label,command=cmd).pack(side='left',padx=(0,5))
         imgbar=ttk.Frame(shell);imgbar.pack(fill='x',pady=2)
-        ttk.Label(imgbar,text='Produtos por execução:').pack(side='left')
-        ttk.Entry(imgbar,textvariable=self.image_products,width=6).pack(side='left',padx=4)
+        ttk.Label(imgbar,text='Produtos por execução (0 = todos):').pack(side='left')
+        ttk.Entry(imgbar,textvariable=self.image_products,width=12).pack(side='left',padx=4)
         ttk.Label(imgbar,text='Máx. imagens por produto:').pack(side='left')
         ttk.Entry(imgbar,textvariable=self.image_limit,width=8).pack(side='left',padx=6)
         ttk.Label(imgbar,text='Somente galeria identificada.').pack(side='left',padx=6)
@@ -264,7 +264,7 @@ class App:
     def validate(self):
         try:n=int(self.target.get())
         except ValueError:raise ValueError('Quantidade deve ser um número inteiro.')
-        if not 1<=n<=10000:raise ValueError('Informe de 1 a 10.000 URLs POR categoria.')
+        if n<1:raise ValueError('Informe um inteiro positivo de URLs por categoria, sem limite máximo fixo.')
         return n
 
     def browser(self):
@@ -364,7 +364,7 @@ class App:
                 driver.get(url)
                 self.stop.wait(3)
                 stale=0
-                for scroll in range(250):
+                for scroll in range(max(250,limit*3)):
                     if self.stop.is_set():break
                     new,count=self.scrape_links(cat,limit)
                     if scroll%5==0 or new:self.logmsg(f'{cat}: {count}/{limit}; rolagem {scroll+1}; +{new}')
@@ -425,15 +425,27 @@ class App:
     def capture_images(self):
         try:limit=int(self.image_products.get());max_imgs=int(self.image_limit.get())
         except ValueError:messagebox.showwarning('Limite','Informe números inteiros.');return
-        if not 1<=limit<=500 or not 1<=max_imgs<=30:
-            messagebox.showwarning('Limite','Use de 1 a 500 produtos por execução e 1 a 30 imagens por produto.');return
+        if limit<0 or not 1<=max_imgs<=30:
+            messagebox.showwarning('Limite','Informe 0 para todos os produtos pendentes ou um número positivo; imagens por produto de 1 a 30.');return
         def task():
             driver=self.browser();self.stop.clear();done=0
-            with self.lock:urls=[u for u,x in self.items.items() if x.get('captura_imagens') not in ('galeria_identificada',) or not x.get('preco_observado') or x.get('frete_status') in (None,'nao_verificado','frete_nao_confirmado') or not x.get('origem_envio') or not x.get('disponibilidade_status')]
-            for u in urls[:limit]:
+            with self.lock:urls=[u for u,x in self.items.items() if x.get('captura_imagens') != 'galeria_identificada' or not x.get('imagens')]
+            self.logmsg(f'Galerias pendentes: {len(urls)}; produtos a processar: {len(urls) if limit==0 else min(limit,len(urls))}. Preços/frete não obrigam repetir uma galeria já capturada.')
+            selected_urls=urls if limit==0 else urls[:limit]
+            for u in selected_urls:
                 if self.stop.is_set():break
-                driver.get(u)
+                try:
+                    driver.get(u)
+                except Exception as exc:
+                    self.logmsg(f'Falha ao abrir produto {u}: {str(exc)[:120]}. Próximo produto.')
+                    continue
                 if self.stop.wait(3):break
+                # Aguarda o carregamento assíncrono da galeria, sem contornar bloqueios.
+                for _ in range(6):
+                    if self.stop.is_set():break
+                    ready=driver.execute_script("return !!document.querySelector('[class*=\"gallery\"] img,[class*=\"image-view\"] img,[class*=\"product-image\"] img,meta[property=\"og:image\"]')")
+                    if ready:break
+                    if self.stop.wait(1):break
                 # Extrai somente imagens em contêineres de galeria de produto.
                 # Não percorre imagens genéricas da página, anúncios ou recomendações.
                 raw=driver.execute_script(r"""
@@ -444,7 +456,9 @@ class App:
                   '[class*="slider"] [class*="image"] img',
                   '[data-pl="product-image"] img',
                   '[class*="magnifier"] img',
-                  '[class*="gallery"] img'
+                  '[class*="gallery"] img',
+                  '[class*="slider"] img','[class*="thumbnail"] img',
+                  '[class*="sku-image"] img','[class*="product-detail"] img'
                 ];
                 const candidates=[];
                 for(const sel of selectors){
@@ -458,6 +472,16 @@ class App:
                 }
                 const title=document.querySelector('meta[property="og:title"]')?.content||document.title||'';
                 const og=document.querySelector('meta[property="og:image"]')?.content||'';
+                // Fallback estrito para imagens do produto quando a galeria usa novos nomes de classe.
+                if(!candidates.length){
+                  for(const img of document.querySelectorAll('img')){
+                    if(img.closest('header,footer,nav,[class*="recommend"],[class*="review"],[class*="advert"]'))continue;
+                    const box=img.getBoundingClientRect();
+                    if(box.width<75||box.height<75)continue;
+                    const u=img.currentSrc||img.getAttribute('data-src')||img.src||'';
+                    if(/aliexpress-media\.com|alicdn\.com/i.test(u))candidates.push(u);
+                  }
+                }
                 // OG é fallback somente quando a página é individual de produto.
                 // Prioriza o preço atual principal visível; não lê preço riscado/parcelas.
                 // Seletores baseados nos prints de DevTools, sujeitos a mudanças no site.
@@ -560,16 +584,19 @@ class App:
                     self.items[u]['frete_status']=shipping_status if shipping_status not in ('frete_nao_confirmado','revisao_frete_contraditorio') else self.items[u].get('frete_status') or shipping_status
                     self.items[u]['frete_observado']=shipping_cost if shipping_cost is not None else self.items[u].get('frete_observado')
                     self.items[u]['frete_texto']=shipping_joined[:300]
-                    self.items[u]['preco_observado']=price_value if price_value is not None else self.items[u].get('preco_observado')
-                    self.items[u]['moeda_observada']='BRL' if self.items[u]['preco_observado'] is not None else None
-                    self.items[u]['preco_status']='observado_na_pagina_nao_confirmado' if self.items[u]['preco_observado'] is not None else 'revisao_preco_ambiguo_ou_ausente'
+                    # O observador_precos é a única fonte para atualização de preço.
+                    # A rotina de imagens não altera preço/status, evitando sobrescrever promoções ou revisões.
                     self.items[u]['imagens']=found or self.items[u].get('imagens',[])
-                    self.items[u]['titulo']=str(raw.get('title',''))[:300]
+                    self.items[u]['titulo']=str(raw.get('title') or self.items[u].get('titulo') or '')[:300]
                     self.items[u]['captura_imagens']='galeria_identificada' if self.items[u]['imagens'] else 'revisao_sem_galeria'
-                done+=1;self.logmsg(f'Produto {done}/{min(limit,len(urls))}: {len(found)} imagens; preço observado: {price_value if price_value is not None else "revisão"}; frete: {shipping_status}; origem: {origin or "não confirmada"}; estoque: {stock_quantity if stock_quantity is not None else availability} — {u}')
+                done+=1;self.logmsg(f'Produto {done}/{len(selected_urls)}: {len(found)} imagens; preço observado: {price_value if price_value is not None else "revisão"}; frete: {shipping_status}; origem: {origin or "não confirmada"}; estoque: {stock_quantity if stock_quantity is not None else availability} — {u}')
                 if done%5==0:self.save_files()
                 if self.stop.wait(2):break
-            self.save_files();self.logmsg('Captura concluída. Confira imagens_produtos.csv; URLs podem expirar ou ser bloqueadas.')
+            self.save_files()
+            with self.lock:
+                pendentes=sum(not x.get('imagens') for x in self.items.values())
+                galerias=sum(bool(x.get('imagens')) for x in self.items.values())
+            self.logmsg(f'Captura encerrada: {galerias} produtos com imagens, {pendentes} sem imagens. Confira imagens_produtos.csv. Produtos pendentes podem ser tentados novamente.')
         self.run(task)
 
     def verify_prices(self):
@@ -591,6 +618,10 @@ class App:
                     driver.get(u)
                     if self.stop.wait(4):break
                     result=observe(driver)
+                    for attempt in range(2):
+                        if result.get('preco_observado') is not None or self.stop.is_set():break
+                        if self.stop.wait(2):break
+                        result=observe(driver)
                     with self.lock:
                         item=self.items.get(u)
                         if item is None:continue
@@ -598,6 +629,9 @@ class App:
                         item['preco_anterior_observado']=previous
                         # Uma nova leitura inconclusiva nunca vira preço confirmado.
                         item.update(result)
+                        if result['preco_observado'] is None and previous is not None:
+                            item['preco_anterior_observado']=previous
+                            item['preco_status']='revisao_preco_atual_ausente_valor_anterior_preservado'
                     if result['preco_observado'] is not None:ok+=1
                     self.logmsg(f'Preço {i}/{len(urls)}: {result["preco_observado"] if result["preco_observado"] is not None else "REVISÃO"} | {result["preco_status"]} | {u}')
                 except Exception as exc:

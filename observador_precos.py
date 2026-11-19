@@ -16,7 +16,10 @@ const selectors = [
   'span[class*="price-default--current--"]',
   'span[class*="price--current--"]',
   '[class*="price-current"] span',
-  '[class*="product-price"] [class*="current"] span'
+  '[class*="product-price"] [class*="current"] span',
+  '[class*="price-default--current"] span',
+  '[class*="price-sale"] span',
+  '[class*="price--current"] span'
 ];
 const out=[];
 for (const selector of selectors) {
@@ -24,7 +27,7 @@ for (const selector of selectors) {
   for (const el of document.querySelectorAll(selector)) {
     if (!visible(el) || excluded(el)) continue;
     const t=(el.innerText||el.textContent||'').replace(/\s+/g,' ').trim();
-    if (/^R\$\s*[\d.]+,\d{2}$/.test(t) || /^R\$\s*[\d.]+,\d{2}\s*$/.test(t)) {
+    if (/^R\$\s*[\d.]+,\d{2}$/.test(t)) {
       const rect=el.getBoundingClientRect();
       matches.push({text:t, selector, y:Math.round(rect.y), x:Math.round(rect.x)});
     }
@@ -47,6 +50,7 @@ def parse_brl(value):
 def observe(driver):
     """Retorna leitura vinculada a URL; nao confunde cupom/parcelas/impostos."""
     raw=driver.execute_script(SCRIPT) or {}
+    if not isinstance(raw,dict):raw={}
     candidates=raw.get('candidates') or []
     prices=[parse_brl(x.get('text','')) for x in candidates if isinstance(x,dict)]
     prices=[x for x in prices if x is not None]
