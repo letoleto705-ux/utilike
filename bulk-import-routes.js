@@ -56,7 +56,9 @@ module.exports = pool => {
           const categoria=typeof raw.categoria==='string'?raw.categoria.trim().slice(0,120):'';
           const fornecedorReal=fornecedor==='auto'?identify(url):fornecedor;
           if (imagens.length && fornecedorReal !== 'AliExpress') throw Error('Galeria disponível apenas para AliExpress');
-          entries.push({url, fornecedor:fornecedorReal, nome, categoria, imagens});
+          const precoObs=raw.preco_observado;
+          const precoValido=typeof precoObs==='number' && Number.isFinite(precoObs) && precoObs>0 && precoObs<=1000000 && raw.moeda_observada==='BRL' && raw.preco_status==='observado_na_pagina_nao_confirmado';
+          entries.push({url, fornecedor:fornecedorReal, nome, categoria, imagens, precoObservado:precoValido?Math.round(precoObs*100)/100:null});
         } catch(e){ return res.status(400).json({erro:`Registro ${i+1}: ${e.message}`}); }
       }
       const unique = [...new Map(entries.map(x=>[x.url,x])).values()];
@@ -67,22 +69,22 @@ module.exports = pool => {
         let inserted=0, atualizadas=0, comImagens=0;
         for(const x of unique){
           const hasGallery=x.imagens.length>0;
-          const dados=hasGallery?JSON.stringify({nome:x.nome||null,categoria:x.categoria,imagens:x.imagens,imagem:x.imagens[0],url_origem:x.url,origem:'captura_local_selenium',preco:null,estoque:null,preco_confirmado:false}):null;
+          const dados=JSON.stringify({nome:x.nome||null,categoria:x.categoria,imagens:x.imagens,imagem:x.imagens[0]||null,url_origem:x.url,origem:'captura_local_selenium',preco:null,preco_observado:x.precoObservado,moeda_observada:x.precoObservado!==null?'BRL':null,preco_status:x.precoObservado!==null?'observado_na_pagina_nao_confirmado':'nao_verificado',estoque:null,preco_confirmado:false});
           // Mantém revisões já existentes. Nunca publica na vitrine.
           const result=await client.query(`INSERT INTO importacao_urls (url,fornecedor,status,lote_id,nome,imagem,dados_extraidos)
             VALUES ($1,$2,'pendente',$3,$4,$5,$6)
             ON CONFLICT (url) DO NOTHING RETURNING id`,[x.url,x.fornecedor,job.rows[0].id,x.nome||null,x.imagens[0]||null,dados]);
           inserted+=result.rowCount;
           if(hasGallery && result.rows[0]) await salvarGaleria(client,result.rows[0].id,x.imagens);
-          if(hasGallery){
-            comImagens++;
+          if(hasGallery || x.precoObservado!==null){
+            if(hasGallery) comImagens++;
             if(!result.rowCount){
               const updated=await client.query(`UPDATE importacao_urls SET
-                nome=COALESCE(NULLIF($2,''),nome),imagem=$3,
+                nome=COALESCE(NULLIF($2,''),nome),imagem=COALESCE($3,imagem),
                 dados_extraidos=COALESCE(dados_extraidos,'{}'::jsonb) || $4::jsonb,
                 atualizado_em=NOW()
                 WHERE url=$1 RETURNING id`,[x.url,x.nome,x.imagens[0],dados]);
-              if(updated.rows[0]) await salvarGaleria(client,updated.rows[0].id,x.imagens);
+              if(updated.rows[0] && hasGallery) await salvarGaleria(client,updated.rows[0].id,x.imagens);
               atualizadas+=updated.rowCount;
             }
           }

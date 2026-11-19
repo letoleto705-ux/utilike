@@ -2,6 +2,18 @@
 const { Router } = require('express');
 module.exports = (pool) => {
   const r = Router();
+  // Configuração isolada no JSONB existente: não requer migração.
+  r.get('/markup', async(req,res,next)=>{try{
+    const x=await pool.query("SELECT valor FROM config WHERE chave='markup_divisor_margem'");
+    const margem=x.rows.length?Number(x.rows[0].valor):30;
+    res.json({margem:Number.isFinite(margem)&&margem>=0&&margem<100?margem:30});
+  }catch(e){next(e)}});
+  r.put('/markup', async(req,res,next)=>{try{
+    const margem=Number(req.body?.margem);
+    if(!Number.isFinite(margem)||margem<0||margem>80)return res.status(400).json({erro:'Margem entre 0% e 80%.'});
+    await pool.query("INSERT INTO config(chave,valor) VALUES('markup_divisor_margem',$1::jsonb) ON CONFLICT(chave) DO UPDATE SET valor=EXCLUDED.valor",[JSON.stringify(margem)]);
+    res.json({ok:true,margem});
+  }catch(e){next(e)}});
   r.get('/candidatos', async (req,res,next) => {
     try {
       const result = await pool.query(`SELECT u.id,u.url,u.nome,u.fornecedor,u.status,u.imagem,u.preco,u.estoque,u.dados_extraidos,
@@ -18,9 +30,15 @@ module.exports = (pool) => {
     const preco = Number(req.body?.preco);
     const estoque = Number(req.body?.estoque);
     const confirmado = req.body?.confirmado === true;
-    if (!Number.isSafeInteger(id) || id <= 0 || !nome || nome.length > 250 || !categoria || categoria.length > 120 || descricao.length > 2000 || !Number.isFinite(preco) || preco <= 0 || preco > 10000000 || !Number.isInteger(estoque) || estoque < 0 || estoque > 10000000 || !confirmado) {
+    const custo = Number(req.body?.custo);
+    const margem = Number(req.body?.margem);
+    const freteConfirmado = req.body?.freteConfirmado === true;
+    const precoConfirmado = req.body?.precoConfirmado === true;
+    if (!Number.isSafeInteger(id) || id <= 0 || !nome || nome.length > 250 || !categoria || categoria.length > 120 || descricao.length > 2000 || !Number.isFinite(preco) || preco <= 0 || preco > 10000000 || !Number.isInteger(estoque) || estoque < 0 || estoque > 10000000 || !Number.isFinite(custo) || custo<=0 || !Number.isFinite(margem) || margem<0 || margem>80 || !precoConfirmado || !freteConfirmado || !confirmado) {
       return res.status(400).json({erro:'Informe nome, categoria, preço positivo, estoque inteiro e confirme a revisão manual.'});
     }
+    const esperado=Math.ceil((custo/(1-margem/100)-1e-9)*100)/100;
+    if(Math.abs(preco-esperado)>0.011)return res.status(400).json({erro:'Preço de venda divergente do markup divisor. Atualize o cálculo.'});
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -38,9 +56,10 @@ module.exports = (pool) => {
       if(!Array.isArray(lista)) throw Error('Catálogo de produtos não está em formato de lista.');
       const produtoId = `garimpagem-${id}`;
       const anterior = lista.find(p=>String(p.id)===produtoId);
-      const produto = {...(anterior||{}),id:produtoId,nome,categoria,desc:descricao,precoPor:preco,estoque,imagem:imagens[0],imagens,ativo:true,urlFornecedor:u.url,importacaoUrlId:id};
+      const produto = {...(anterior||{}),custoFornecedor:custo,margemMarkup:margem,id:produtoId,nome,categoria,desc:descricao,precoPor:preco,estoque,imagem:imagens[0],imagens,ativo:true,urlFornecedor:u.url,importacaoUrlId:id};
       const novaLista = [...lista.filter(p=>String(p.id)!==produtoId),produto];
       await client.query(`UPDATE config SET valor=$1::jsonb WHERE chave='produtos'`,[JSON.stringify(novaLista)]);
+      await client.query(`UPDATE importacao_urls SET dados_extraidos=COALESCE(dados_extraidos,'{}'::jsonb)||$2::jsonb WHERE id=$1`,[id,JSON.stringify({preco_custo_confirmado:custo,moeda:'BRL',margem_markup:margem,preco_venda:preco,preco_confirmado:true,frete_revisado:true,confirmacao_manual_em:new Date().toISOString()})]);
       await client.query(`UPDATE importacao_urls SET status='pronto',nome=$2,preco=$3,estoque=$4,imagem=$5,atualizado_em=NOW() WHERE id=$1`,[id,nome,preco,estoque,imagens[0]]);
       await client.query('COMMIT');
       res.json({ok:true,produtoId,mensagem:'Produto publicado manualmente no catálogo da vitrine.'});

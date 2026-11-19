@@ -78,7 +78,7 @@ def image_url(url):
 class App:
     def __init__(self, root):
         self.root=root
-        root.title('Uti Like | Garimpagem V5')
+        root.title('Uti Like | Garimpagem V6 (preços observados)')
         root.geometry('1050x760');root.minsize(800,600)
         self.driver=None
         self.stop=threading.Event()
@@ -124,7 +124,7 @@ class App:
             except (tk.TclError, AttributeError):
                 pass
         root.bind_all('<MouseWheel>',page_wheel,add='+')
-        ttk.Label(shell,text='Garimpagem V5 — AliExpress',font=('Segoe UI',16,'bold')).pack(anchor='w')
+        ttk.Label(shell,text='Garimpagem V6 (preços observados) — AliExpress',font=('Segoe UI',16,'bold')).pack(anchor='w')
         ttk.Label(shell,text='Quantidade significa URLs por categoria. Imagens são URLs separadas das URLs dos produtos.').pack(anchor='w',pady=4)
         bar=ttk.Frame(shell);bar.pack(fill='x',pady=5)
         ttk.Label(bar,text='Página inicial:').pack(side='left')
@@ -343,7 +343,7 @@ class App:
                 if count>=limit:break
                 u=canonical(raw)
                 if not u or u in self.items:continue
-                self.items[u]={'categoria':cat,'imagens':[],'titulo':'','captura_imagens':'nao_verificado'}
+                self.items[u]={'categoria':cat,'imagens':[],'titulo':'','captura_imagens':'nao_verificado','preco_observado':None,'moeda_observada':None,'preco_status':'nao_verificado'}
                 count+=1;new+=1
         return new,count
 
@@ -392,8 +392,8 @@ class App:
         atomic_text(txt,'\n'.join(x['url'] for x in data)+'\n')
         import io
         buffer=io.StringIO(newline='')
-        w=csv.writer(buffer,delimiter=';');w.writerow(['fornecedor','categoria','url_produto','titulo','url_imagem_principal','total_imagens','status_imagens'])
-        for x in data:w.writerow(['AliExpress',x['categoria'],x['url'],x['titulo'],(x['imagens'] or [''])[0],len(x['imagens']),x['captura_imagens']])
+        w=csv.writer(buffer,delimiter=';');w.writerow(['fornecedor','categoria','url_produto','titulo','url_imagem_principal','total_imagens','status_imagens','preco_observado','moeda','status_preco'])
+        for x in data:w.writerow(['AliExpress',x['categoria'],x['url'],x['titulo'],(x['imagens'] or [''])[0],len(x['imagens']),x['captura_imagens'],x.get('preco_observado') or '',x.get('moeda_observada') or '',x.get('preco_status','nao_verificado')])
         atomic_text(csvfile,buffer.getvalue(),encoding='utf-8-sig')
         buffer=io.StringIO(newline='')
         w=csv.writer(buffer,delimiter=';');w.writerow(['id_produto','url_produto','categoria','ordem','url_imagem','status_validacao'])
@@ -415,7 +415,7 @@ class App:
                 for x in data:
                     if not isinstance(x,dict):continue
                     u=canonical(x.get('url',''))
-                    if u and u not in self.items:self.items[u]={k:x.get(k) for k in ('categoria','imagens','titulo','captura_imagens')}
+                    if u and u not in self.items:self.items[u]={k:x.get(k) for k in ('categoria','imagens','titulo','captura_imagens','preco_observado','moeda_observada','preco_status')}
             self.logmsg(f'Progresso recuperado: {len(self.items)} URLs únicas.')
         except (ValueError,OSError,TypeError) as e:
             if silent:self.logmsg('Progresso não carregado: '+str(e)[:150])
@@ -458,7 +458,15 @@ class App:
                 const title=document.querySelector('meta[property="og:title"]')?.content||document.title||'';
                 const og=document.querySelector('meta[property="og:image"]')?.content||'';
                 // OG é fallback somente quando a página é individual de produto.
-                return {title,imgs:candidates,og};
+                // Observação visual, NÃO custo confirmado. Não adivinhar moeda nem variante.
+                const priceSelectors=['[class*="product-price"] [class*="price"]','[class*="price--current"]','[class*="price-current"]','[class*="price--original"]'];
+                const priceTexts=[];
+                for(const sel of priceSelectors){try{for(const el of document.querySelectorAll(sel)){
+                  if(el.getClientRects().length && !el.closest('[class*="recommend"],[class*="review"],del,s')){
+                    const t=(el.innerText||'').trim();if(t && t.length<90)priceTexts.push(t);
+                  }
+                }}catch(e){}}
+                return {title,imgs:candidates,og,priceTexts:[...new Set(priceTexts)].slice(0,8)};
                 """)
                 found=[];seen=set()
                 for raw_url in raw.get('imgs',[]):
@@ -469,11 +477,25 @@ class App:
                 if not found and raw.get('og'):
                     link=urljoin(driver.current_url,raw['og'])
                     if image_url(link):found=[link]
+                # Somente preço visível inequívoco em BRL. Preços promocionais/variantes exigem revisão.
+                price_candidates=[]
+                for label in raw.get('priceTexts',[]):
+                    matches=re.findall(r'R\$\s*([0-9][0-9.]*,[0-9]{2})',str(label))
+                    for amount in matches:
+                        try:
+                            value=round(float(amount.replace('.','').replace(',','.')),2)
+                            if 0 < value <= 1000000:price_candidates.append(value)
+                        except ValueError:pass
+                price_candidates=set(price_candidates)
+                price_value=next(iter(price_candidates)) if len(price_candidates)==1 else None
                 with self.lock:
+                    self.items[u]['preco_observado']=price_value
+                    self.items[u]['moeda_observada']='BRL' if price_value is not None else None
+                    self.items[u]['preco_status']='observado_na_pagina_nao_confirmado' if price_value is not None else 'revisao_preco_ambiguo_ou_ausente'
                     self.items[u]['imagens']=found
                     self.items[u]['titulo']=str(raw.get('title',''))[:300]
                     self.items[u]['captura_imagens']='galeria_identificada' if found else 'revisao_sem_galeria'
-                done+=1;self.logmsg(f'Galeria {done}/{min(limit,len(urls))}: {len(found)} imagem(ns) associadas a {u}')
+                done+=1;self.logmsg(f'Produto {done}/{min(limit,len(urls))}: {len(found)} imagens; preço observado: {price_value if price_value is not None else "revisão"} — {u}')
                 if done%5==0:self.save_files()
                 if self.stop.wait(2):break
             self.save_files();self.logmsg('Captura concluída. Confira imagens_produtos.csv; URLs podem expirar ou ser bloqueadas.')
@@ -481,7 +503,7 @@ class App:
 
     def send(self):
         with self.lock:
-            produtos=[{'url':u,'categoria':x.get('categoria',''),'titulo':x.get('titulo',''),'imagens':list(x.get('imagens') or [])[:12]} for u,x in self.items.items()]
+            produtos=[{'url':u,'categoria':x.get('categoria',''),'titulo':x.get('titulo',''),'imagens':list(x.get('imagens') or [])[:12],'preco_observado':x.get('preco_observado'),'moeda_observada':x.get('moeda_observada'),'preco_status':x.get('preco_status','nao_verificado')} for u,x in self.items.items()]
         urls=[x['url'] for x in produtos]
         if not urls:messagebox.showwarning('Sem URLs','Colete produtos primeiro.');return
         base=self.render.get().strip().rstrip('/');p=urlparse(base)
