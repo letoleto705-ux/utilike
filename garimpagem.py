@@ -392,8 +392,8 @@ class App:
         atomic_text(txt,'\n'.join(x['url'] for x in data)+'\n')
         import io
         buffer=io.StringIO(newline='')
-        w=csv.writer(buffer,delimiter=';');w.writerow(['fornecedor','categoria','url_produto','titulo','url_imagem_principal','total_imagens','status_imagens','preco_observado','moeda','status_preco','frete_status','frete_observado'])
-        for x in data:w.writerow(['AliExpress',x['categoria'],x['url'],x['titulo'],(x['imagens'] or [''])[0],len(x['imagens']),x['captura_imagens'],x.get('preco_observado') or '',x.get('moeda_observada') or '',x.get('preco_status','nao_verificado'),x.get('frete_status','nao_verificado'),x.get('frete_observado') if x.get('frete_observado') is not None else ''])
+        w=csv.writer(buffer,delimiter=';');w.writerow(['fornecedor','categoria','url_produto','titulo','url_imagem_principal','total_imagens','status_imagens','preco_observado','moeda','status_preco','frete_status','frete_observado','origem_envio','disponibilidade_status','estoque_observado'])
+        for x in data:w.writerow(['AliExpress',x['categoria'],x['url'],x['titulo'],(x['imagens'] or [''])[0],len(x['imagens']),x['captura_imagens'],x.get('preco_observado') or '',x.get('moeda_observada') or '',x.get('preco_status','nao_verificado'),x.get('frete_status','nao_verificado'),x.get('frete_observado') if x.get('frete_observado') is not None else '',x.get('origem_envio') or '',x.get('disponibilidade_status') or 'nao_confirmado',x.get('estoque_observado') if x.get('estoque_observado') is not None else ''])
         atomic_text(csvfile,buffer.getvalue(),encoding='utf-8-sig')
         buffer=io.StringIO(newline='')
         w=csv.writer(buffer,delimiter=';');w.writerow(['id_produto','url_produto','categoria','ordem','url_imagem','status_validacao'])
@@ -415,7 +415,7 @@ class App:
                 for x in data:
                     if not isinstance(x,dict):continue
                     u=canonical(x.get('url',''))
-                    if u and u not in self.items:self.items[u]={k:x.get(k) for k in ('categoria','imagens','titulo','captura_imagens','preco_observado','moeda_observada','preco_status','frete_status','frete_observado','frete_texto')}
+                    if u and u not in self.items:self.items[u]={k:x.get(k) for k in ('categoria','imagens','titulo','captura_imagens','preco_observado','moeda_observada','preco_status','frete_status','frete_observado','frete_texto','origem_envio','origem_envio_texto','disponibilidade_status','estoque_observado','estoque_texto')}
             self.logmsg(f'Progresso recuperado: {len(self.items)} URLs únicas.')
         except (ValueError,OSError,TypeError) as e:
             if silent:self.logmsg('Progresso não carregado: '+str(e)[:150])
@@ -428,7 +428,7 @@ class App:
             messagebox.showwarning('Limite','Use de 1 a 500 produtos por execução e 1 a 30 imagens por produto.');return
         def task():
             driver=self.browser();self.stop.clear();done=0
-            with self.lock:urls=[u for u,x in self.items.items() if x.get('captura_imagens') not in ('galeria_identificada',) or not x.get('preco_observado') or not x.get('frete_status')]
+            with self.lock:urls=[u for u,x in self.items.items() if x.get('captura_imagens') not in ('galeria_identificada',) or not x.get('preco_observado') or x.get('frete_status') in (None,'nao_verificado','frete_nao_confirmado') or not x.get('origem_envio') or not x.get('disponibilidade_status')]
             for u in urls[:limit]:
                 if self.stop.is_set():break
                 driver.get(u)
@@ -460,7 +460,7 @@ class App:
                 // OG é fallback somente quando a página é individual de produto.
                 // Prioriza o preço atual principal visível; não lê preço riscado/parcelas.
                 // Seletores baseados nos prints de DevTools, sujeitos a mudanças no site.
-                const priceSelectors=['[class*="price-default--current"]','[class*="price--current"]','[class*="price-current"]','[class*="product-price"] [class*="current"]'];
+                const priceSelectors=['span[class*="price-default--current--"]','[class*="price-default--current"]','[class*="price--current"]','[class*="price-current"]','[class*="product-price"] [class*="current"]'];
                 const visible=el=>!!el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden';
                 const excluded=el=>!!el.closest('del,s,[class*="original"],[class*="oldPrice"],[class*="installment"],[class*="recommend"],[class*="review"]');
                 let priceTexts=[];
@@ -469,7 +469,7 @@ class App:
                   for(const el of document.querySelectorAll(sel)){
                     if(!visible(el)||excluded(el))continue;
                     const t=(el.innerText||el.textContent||'').trim();
-                    if(t.length<100&&/R\$\s*[\d.,]+/.test(t))matches.push(t);
+                    if(t.length<100&&/R\$\s*[\d.,]+/.test(t)&&!el.querySelector('[class*="price-default--current--"]'))matches.push(t);
                   }
                   if(matches.length){priceTexts=[...new Set(matches)].slice(0,8);break;}
                 }
@@ -480,7 +480,23 @@ class App:
                   const t=(el.innerText||el.textContent||'').replace(/\s+/g,' ').trim();
                   if(t&&t.length<240)shippingTexts.push(t);
                 }
-                return {title,imgs:candidates,og,priceTexts,shippingTexts:[...new Set(shippingTexts)].slice(0,8)};
+                // Origem do envio: SOMENTE rótulos explícitos de envio, nunca país do domínio.
+                const shippingOriginSelectors=['[class*="shipping"]','[class*="Shipping"]','[class*="delivery"]','[class*="Delivery"]'];
+                const originTexts=[];
+                for(const sel of shippingOriginSelectors)for(const el of document.querySelectorAll(sel)){
+                  if(!visible(el)||excluded(el))continue;
+                  const t=(el.innerText||'').replace(/\s+/g,' ').trim();
+                  if(t.length>0&&t.length<180&&/(enviado de|envia de|envio de|ships from|ship from|origem do envio|local de envio)/i.test(t))originTexts.push(t);
+                }
+                // Estoque: texto da seção de compra, não números de avaliações/vendas.
+                const availabilitySelectors=['[class*="quantity"]','[class*="Quantity"]','[class*="inventory"]','[class*="Inventory"]','[class*="stock"]','[class*="Stock"]','[class*="sku"]'];
+                const availabilityTexts=[];
+                for(const sel of availabilitySelectors)for(const el of document.querySelectorAll(sel)){
+                  if(!visible(el)||excluded(el))continue;
+                  const t=(el.innerText||'').replace(/\s+/g,' ').trim();
+                  if(t&&t.length<130&&/(esgotado|fora de estoque|sem estoque|indisponível|em estoque|disponível|restam\s+\d+|\d+\s+disponíveis|out of stock|in stock|only \d+ left|\d+ available)/i.test(t))availabilityTexts.push(t);
+                }
+                return {title,imgs:candidates,og,priceTexts,shippingTexts:[...new Set(shippingTexts)].slice(0,8),originTexts:[...new Set(originTexts)].slice(0,5),availabilityTexts:[...new Set(availabilityTexts)].slice(0,8)};
                 """)
                 found=[];seen=set()
                 for raw_url in raw.get('imgs',[]):
@@ -514,17 +530,42 @@ class App:
                 elif free:shipping_status,shipping_cost='frete_gratis_observado',0.0
                 elif len(set(shipping_prices))==1:shipping_status,shipping_cost='frete_pago_observado',shipping_prices[0]
                 else:shipping_status,shipping_cost='frete_nao_confirmado',None
+                origin_text=' | '.join(raw.get('originTexts',[]))[:350]
+                origins=[]
+                for text in raw.get('originTexts',[]):
+                    m=re.search(r'(?:enviado de|envia de|envio de|ships from|ship from|origem do envio|local de envio)\s*[:：-]?\s*(Brasil|Brazil|China|Espanha|Spain|Estados Unidos|United States|Portugal|França|France|Alemanha|Germany|Turquia|Turkey)\b',text,re.I)
+                    if m:
+                        country=m.group(1).lower()
+                        countries={'brazil':'Brasil','brasil':'Brasil','china':'China','espanha':'Espanha','spain':'Espanha','estados unidos':'Estados Unidos','united states':'Estados Unidos','portugal':'Portugal','frança':'França','france':'França','alemanha':'Alemanha','germany':'Alemanha','turquia':'Turquia','turkey':'Turquia'}
+                        origins.append(countries.get(country,m.group(1)))
+                origin=origins[0] if origins and len(set(origins))==1 else None
+                avail_text=' | '.join(raw.get('availabilityTexts',[]))[:350]
+                if re.search(r'\b(esgotado|fora de estoque|sem estoque|indisponível|out of stock)\b',avail_text,re.I):
+                    availability='esgotado'
+                elif re.search(r'\b(em estoque|disponível|disponíveis|in stock|available|restam\s+\d+|only \d+ left)\b',avail_text,re.I):
+                    availability='disponivel'
+                else:availability='nao_confirmado'
+                stock_numbers=[]
+                for text in raw.get('availabilityTexts',[]):
+                    for pattern in (r'\brestam\s+(\d+)\b',r'\b(\d+)\s+disponíveis\b',r'\bonly\s+(\d+)\s+left\b',r'\b(\d+)\s+available\b'):
+                        stock_numbers += [int(v) for v in re.findall(pattern,text,re.I)]
+                stock_quantity=stock_numbers[0] if stock_numbers and len(set(stock_numbers))==1 and 0<stock_numbers[0]<=1000000 else None
                 with self.lock:
-                    self.items[u]['frete_status']=shipping_status
-                    self.items[u]['frete_observado']=shipping_cost
+                    self.items[u]['origem_envio']=origin or self.items[u].get('origem_envio')
+                    self.items[u]['origem_envio_texto']=origin_text
+                    self.items[u]['disponibilidade_status']=availability if availability!='nao_confirmado' else self.items[u].get('disponibilidade_status','nao_confirmado')
+                    self.items[u]['estoque_observado']=stock_quantity if stock_quantity is not None else self.items[u].get('estoque_observado')
+                    self.items[u]['estoque_texto']=avail_text
+                    self.items[u]['frete_status']=shipping_status if shipping_status not in ('frete_nao_confirmado','revisao_frete_contraditorio') else self.items[u].get('frete_status') or shipping_status
+                    self.items[u]['frete_observado']=shipping_cost if shipping_cost is not None else self.items[u].get('frete_observado')
                     self.items[u]['frete_texto']=shipping_joined[:300]
-                    self.items[u]['preco_observado']=price_value
-                    self.items[u]['moeda_observada']='BRL' if price_value is not None else None
-                    self.items[u]['preco_status']='observado_na_pagina_nao_confirmado' if price_value is not None else 'revisao_preco_ambiguo_ou_ausente'
-                    self.items[u]['imagens']=found
+                    self.items[u]['preco_observado']=price_value if price_value is not None else self.items[u].get('preco_observado')
+                    self.items[u]['moeda_observada']='BRL' if self.items[u]['preco_observado'] is not None else None
+                    self.items[u]['preco_status']='observado_na_pagina_nao_confirmado' if self.items[u]['preco_observado'] is not None else 'revisao_preco_ambiguo_ou_ausente'
+                    self.items[u]['imagens']=found or self.items[u].get('imagens',[])
                     self.items[u]['titulo']=str(raw.get('title',''))[:300]
-                    self.items[u]['captura_imagens']='galeria_identificada' if found else 'revisao_sem_galeria'
-                done+=1;self.logmsg(f'Produto {done}/{min(limit,len(urls))}: {len(found)} imagens; preço observado: {price_value if price_value is not None else "revisão"} — {u}')
+                    self.items[u]['captura_imagens']='galeria_identificada' if self.items[u]['imagens'] else 'revisao_sem_galeria'
+                done+=1;self.logmsg(f'Produto {done}/{min(limit,len(urls))}: {len(found)} imagens; preço observado: {price_value if price_value is not None else "revisão"}; frete: {shipping_status}; origem: {origin or "não confirmada"}; estoque: {stock_quantity if stock_quantity is not None else availability} — {u}')
                 if done%5==0:self.save_files()
                 if self.stop.wait(2):break
             self.save_files();self.logmsg('Captura concluída. Confira imagens_produtos.csv; URLs podem expirar ou ser bloqueadas.')
@@ -532,7 +573,7 @@ class App:
 
     def send(self):
         with self.lock:
-            produtos=[{'url':u,'categoria':x.get('categoria',''),'titulo':x.get('titulo',''),'imagens':list(x.get('imagens') or [])[:12],'preco_observado':x.get('preco_observado'),'moeda_observada':x.get('moeda_observada'),'preco_status':x.get('preco_status','nao_verificado'),'frete_status':x.get('frete_status','nao_verificado'),'frete_observado':x.get('frete_observado')} for u,x in self.items.items()]
+            produtos=[{'url':u,'categoria':x.get('categoria',''),'titulo':x.get('titulo',''),'imagens':list(x.get('imagens') or [])[:12],'preco_observado':x.get('preco_observado'),'moeda_observada':x.get('moeda_observada'),'preco_status':x.get('preco_status','nao_verificado'),'frete_status':x.get('frete_status','nao_verificado'),'frete_observado':x.get('frete_observado'),'origem_envio':x.get('origem_envio'),'disponibilidade_status':x.get('disponibilidade_status','nao_confirmado'),'estoque_observado':x.get('estoque_observado')} for u,x in self.items.items()]
         urls=[x['url'] for x in produtos]
         if not urls:messagebox.showwarning('Sem URLs','Colete produtos primeiro.');return
         base=self.render.get().strip().rstrip('/');p=urlparse(base)
