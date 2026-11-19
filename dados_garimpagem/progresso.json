@@ -9,7 +9,10 @@
     "captura_imagens": "galeria_identificada",
     "preco_observado": null,
     "moeda_observada": null,
-    "preco_status": "revisao_preco_ambiguo_ou_ausente"
+    "preco_status": "revisao_preco_ambiguo_ou_ausente",
+    "frete_status": null,
+    "frete_observado": null,
+    "frete_texto": null
   },
   {
     "url": "https://pt.aliexpress.com/item/1005010248866062.html",
@@ -21,7 +24,10 @@
     "captura_imagens": "galeria_identificada",
     "preco_observado": null,
     "moeda_observada": null,
-    "preco_status": "revisao_preco_ambiguo_ou_ausente"
+    "preco_status": "revisao_preco_ambiguo_ou_ausente",
+    "frete_status": null,
+    "frete_observado": null,
+    "frete_texto": null
   },
   {
     "url": "https://pt.aliexpress.com/item/1005010158780648.html",
@@ -33,7 +39,10 @@
     "captura_imagens": "galeria_identificada",
     "preco_observado": null,
     "moeda_observada": null,
-    "preco_status": "revisao_preco_ambiguo_ou_ausente"
+    "preco_status": "revisao_preco_ambiguo_ou_ausente",
+    "frete_status": null,
+    "frete_observado": null,
+    "frete_texto": null
   },
   {
     "url": "https://pt.aliexpress.com/item/1005013633838024.html",
@@ -45,7 +54,10 @@
     "captura_imagens": "galeria_identificada",
     "preco_observado": null,
     "moeda_observada": null,
-    "preco_status": "revisao_preco_ambiguo_ou_ausente"
+    "preco_status": "revisao_preco_ambiguo_ou_ausente",
+    "frete_status": null,
+    "frete_observado": null,
+    "frete_texto": null
   },
   {
     "url": "https://pt.aliexpress.com/item/1005010089107755.html",
@@ -57,6 +69,29 @@
     "captura_imagens": "galeria_identificada",
     "preco_observado": null,
     "moeda_observada": null,
-    "preco_status": "revisao_preco_ambiguo_ou_ausente"
+    "preco_status": "revisao_preco_ambiguo_ou_ausente",
+    "frete_status": null,
+    "frete_observado": null,
+    "frete_texto": null
+  },
+  {
+    "url": "https://pt.aliexpress.com/item/1005013087311811.html",
+    "categoria": "Brinquedos",
+    "imagens": [],
+    "titulo": "",
+    "captura_imagens": "nao_verificado",
+    "preco_observado": null,
+    "moeda_observada": null,
+    "preco_status": "nao_verificado"
+  },
+  {
+    "url": "https://pt.aliexpress.com/item/1005013105908066.html",
+    "categoria": "Brinquedos",
+    "imagens": [],
+    "titulo": "",
+    "captura_imagens": "nao_verificado",
+    "preco_observado": null,
+    "moeda_observada": null,
+    "preco_status": "nao_verificado"
   }
 ]

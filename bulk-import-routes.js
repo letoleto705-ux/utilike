@@ -30,78 +30,60 @@ module.exports = pool => {
   }
 
 
-  // Exclusão definitiva, exclusiva das rotas /api/admin/importacao
-  // protegidas no server.js por auth + soAdmin.
-  async function excluirProdutos(ids, req, res, next) {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      // Serializa exclusões com atualizações do catálogo.
-      await client.query("INSERT INTO config(chave,valor) VALUES('produtos','[]'::jsonb) ON CONFLICT(chave) DO NOTHING");
-      const lockedCatalog = await client.query("SELECT valor FROM config WHERE chave='produtos' FOR UPDATE");
-      const catalog = lockedCatalog.rows[0].valor;
-      if (!Array.isArray(catalog)) throw new Error('Catálogo inválido; exclusão cancelada.');
-      const rows = await client.query('SELECT id,url FROM importacao_urls WHERE id=ANY($1::bigint[]) FOR UPDATE', [ids]);
-      if (rows.rows.length !== ids.length) {
-        await client.query('ROLLBACK');
-        return res.status(409).json({erro:'A lista mudou. Atualize a fila antes de excluir.'});
-      }
-      const idsSet = new Set(ids.map(String));
-      const urlsSet = new Set(rows.rows.map(x=>x.url));
-      const removing = catalog.filter(p=>
-        idsSet.has(String(p.importacaoUrlId ?? '')) ||
-        idsSet.has(String(p.id ?? '').replace(/^garimpagem-/, '')) && /^garimpagem-/.test(String(p.id ?? '')) ||
-        (p.urlFornecedor && urlsSet.has(p.urlFornecedor))
-      );
-      const removeIds = new Set(removing.map(p=>String(p.id)));
-      const cleanCatalog = catalog.filter(p=>!removeIds.has(String(p.id)));
-      // Se já existem pedidos ligados ao produto, a exclusão física poderia
-      // comprometer histórico financeiro: recusa em vez de apagar pedidos.
-      const check = await client.query(
-        "SELECT to_regclass('public.pedidos') AS pedidos"
-      );
-      if (check.rows[0].pedidos && removeIds.size) {
-        const orderCols = await client.query(
-          "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='pedidos'"
-        );
-        const cols = new Set(orderCols.rows.map(x=>x.column_name));
-        if (cols.has('produto_id')) {
-          const existing = await client.query(
-            "SELECT 1 FROM pedidos WHERE produto_id::text=ANY($1::text[]) LIMIT 1",
-            [[...removeIds]]
-          );
-          if (existing.rowCount) {
-            await client.query('ROLLBACK');
-            return res.status(409).json({erro:'Existe pedido vinculado a um dos produtos. Desative-o em vez de excluir o histórico.'});
-          }
-        }
-      }
-      await client.query("UPDATE config SET valor=$1::jsonb WHERE chave='produtos'", [JSON.stringify(cleanCatalog)]);
-      // importacao_imagens e importacao_precos possuem ON DELETE CASCADE.
-      // DELETE explícito evita órfãos em instalações anteriores sem cascade.
-      await client.query('DELETE FROM importacao_imagens WHERE importacao_url_id=ANY($1::bigint[])',[ids]);
-      await client.query('DELETE FROM importacao_precos WHERE importacao_url_id=ANY($1::bigint[])',[ids]);
-      const deleted = await client.query('DELETE FROM importacao_urls WHERE id=ANY($1::bigint[]) RETURNING id',[ids]);
-      await client.query('COMMIT');
-      res.set('Cache-Control','no-store').json({ok:true,excluidos:deleted.rowCount,removidosDaVitrine:removing.length});
-    } catch(e) {try{await client.query('ROLLBACK')}catch{} next(e)}
-    finally {client.release()}
-  }
-  r.delete('/produto/:id',async(req,res,next)=>{
+  // Administração autenticada pelo server.js (auth + soAdmin).
+  // Operações atômicas por URL, preservando produtos sem vínculo com a importação.
+  async function alterarSituacao(req,res,next,acao){
     const id=Number(req.params.id);
-    if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({erro:'ID inválido'});
-    if(req.body?.confirmacao!=='EXCLUIR')return res.status(400).json({erro:'Confirmação obrigatória'});
-    return excluirProdutos([id],req,res,next);
-  });
-  r.post('/excluir-todos',async(req,res,next)=>{
-    if(req.body?.confirmacao!=='EXCLUIR TODOS')return res.status(400).json({erro:'Confirmação obrigatória'});
-    try {
-      const r0=await pool.query('SELECT id FROM importacao_urls ORDER BY id');
-      if(!r0.rows.length)return res.json({ok:true,excluidos:0,removidosDaVitrine:0});
-      if(r0.rows.length>10000)return res.status(409).json({erro:'Mais de 10.000 registros. Exclusão em massa bloqueada.'});
-      return excluirProdutos(r0.rows.map(x=>Number(x.id)),req,res,next);
-    }catch(e){next(e)}
-  });
+    if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({erro:'ID inválido.'});
+    if(acao==='excluir' && req.body?.confirmacao!=='EXCLUIR')return res.status(400).json({erro:'Digite EXCLUIR para confirmar.'});
+    const db=await pool.connect();
+    try{
+      await db.query('BEGIN');
+      // Mesmo lock utilizado na publicação manual para sincronizar a vitrine.
+      await db.query("INSERT INTO config(chave,valor) VALUES('produtos','[]'::jsonb) ON CONFLICT(chave) DO NOTHING");
+      const locked=await db.query("SELECT valor FROM config WHERE chave='produtos' FOR UPDATE");
+      const catalog=locked.rows[0].valor;
+      if(!Array.isArray(catalog))throw Error('Catálogo inválido; nenhuma alteração foi feita.');
+      const found=await db.query('SELECT id,url,dados_extraidos FROM importacao_urls WHERE id=$1 FOR UPDATE',[id]);
+      if(!found.rows.length){await db.query('ROLLBACK');return res.status(404).json({erro:'URL não encontrada. Atualize a fila.'})}
+      const record=found.rows[0];
+      const data=record.dados_extraidos && typeof record.dados_extraidos==='object' && !Array.isArray(record.dados_extraidos)?record.dados_extraidos:{};
+      const linked=p=>String(p.importacaoUrlId??'')===String(id) || String(p.id)==='garimpagem-'+id;
+      const published=catalog.filter(linked);
+      const clean=catalog.filter(p=>!linked(p));
+      if(acao==='excluir'){
+        // Preserva a integridade de pedidos já efetuados, inclusive testes registrados.
+        const order=await db.query("SELECT to_regclass('public.pedidos') AS tabela");
+        if(order.rows[0].tabela){
+          const existing=await db.query("SELECT 1 FROM pedidos WHERE produto_id=ANY($1::text[]) LIMIT 1",[[...new Set(['garimpagem-'+id,...published.map(p=>String(p.id))])]]);
+          if(existing.rowCount){await db.query('ROLLBACK');return res.status(409).json({erro:'Há pedidos vinculados a este produto. A exclusão definitiva foi bloqueada para preservar o histórico.'})}
+        }
+        await db.query("UPDATE config SET valor=$1::jsonb WHERE chave='produtos'",[JSON.stringify(clean)]);
+        // Tabelas auxiliares: exclusão explícita para compatibilidade com esquemas antigos.
+        await db.query('DELETE FROM importacao_imagens WHERE importacao_url_id=$1',[id]);
+        await db.query('DELETE FROM importacao_precos WHERE importacao_url_id=$1',[id]);
+        await db.query('DELETE FROM importacao_urls WHERE id=$1',[id]);
+      }else if(acao==='desativar'){
+        // Guarda cópia do anúncio publicado no registro da URL para futura reativação.
+        const snapshot=published.length?published[0]:(data.catalogo_desativado||null);
+        await db.query("UPDATE importacao_urls SET dados_extraidos=COALESCE(dados_extraidos,'{}'::jsonb)||$2::jsonb,atualizado_em=NOW() WHERE id=$1",[id,JSON.stringify({desativado_vitrine:true,catalogo_desativado:snapshot})]);
+        await db.query("UPDATE config SET valor=$1::jsonb WHERE chave='produtos'",[JSON.stringify(clean)]);
+      }else if(acao==='reativar'){
+        const snapshot=data.catalogo_desativado;
+        if(!data.desativado_vitrine){await db.query('ROLLBACK');return res.status(409).json({erro:'Esta URL não está desativada.'})}
+        if(snapshot && typeof snapshot==='object' && !Array.isArray(snapshot)){
+          const restored={...snapshot,ativo:true};
+          await db.query("UPDATE config SET valor=$1::jsonb WHERE chave='produtos'",[JSON.stringify([...clean,restored])]);
+        }
+        await db.query("UPDATE importacao_urls SET dados_extraidos=COALESCE(dados_extraidos,'{}'::jsonb)||$2::jsonb,atualizado_em=NOW() WHERE id=$1",[id,JSON.stringify({desativado_vitrine:false,catalogo_desativado:null})]);
+      }
+      await db.query('COMMIT');
+      res.set('Cache-Control','no-store').json({ok:true,id,acao,removidosDaVitrine:published.length});
+    }catch(e){try{await db.query('ROLLBACK')}catch{}next(e)}finally{db.release()}
+  }
+  r.post('/produto/:id/desativar',(req,res,next)=>alterarSituacao(req,res,next,'desativar'));
+  r.post('/produto/:id/reativar',(req,res,next)=>alterarSituacao(req,res,next,'reativar'));
+  r.delete('/produto/:id',(req,res,next)=>alterarSituacao(req,res,next,'excluir'));
 
   r.post('/processar',async(req,res,next)=>{try{res.json(await worker.start())}catch(e){next(e)}});
   r.get('/processamento',(req,res)=>res.json(worker.status()));
@@ -203,6 +185,7 @@ module.exports = pool => {
     const [stats,rows]=await Promise.all([
       pool.query('SELECT status, count(*)::int AS quantidade FROM importacao_urls GROUP BY status'),
       pool.query(`SELECT u.id,u.url,u.fornecedor,u.status,u.atualizado_em,u.erro,
+        COALESCE((u.dados_extraidos->>'desativado_vitrine')::boolean,false) AS desativado_vitrine,
         (SELECT p.preco_custo FROM importacao_precos p WHERE p.importacao_url_id=u.id AND p.preco_custo IS NOT NULL ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS preco_observado,
         (SELECT p.frete_status FROM importacao_precos p WHERE p.importacao_url_id=u.id ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS frete_status,
         (SELECT p.valor_frete FROM importacao_precos p WHERE p.importacao_url_id=u.id AND p.valor_frete IS NOT NULL ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS valor_frete,

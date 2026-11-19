@@ -47,6 +47,7 @@ module.exports = (pool) => {
       await client.query('BEGIN');
       const found = await client.query(`SELECT id,url,nome,imagem,status,dados_extraidos FROM importacao_urls WHERE id=$1 FOR UPDATE`,[id]);
       const u = found.rows[0];
+      if(u?.dados_extraidos?.desativado_vitrine===true){await client.query('ROLLBACK');return res.status(409).json({erro:'Produto desativado. Reative-o na fila do Cronjob antes de publicar.'})}
       if(!u || !['revisao','pronto'].includes(u.status)){await client.query('ROLLBACK');return res.status(409).json({erro:'Registro não encontrado ou não está disponível para revisão.'})}
       const pics = await client.query('SELECT url_imagem FROM importacao_imagens WHERE importacao_url_id=$1 ORDER BY ordem LIMIT 12',[id]);
       const imagens = pics.rows.map(x=>x.url_imagem).filter(x=>typeof x==='string'&&/^https:\/\//.test(x));
