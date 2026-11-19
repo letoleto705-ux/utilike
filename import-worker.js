@@ -32,11 +32,20 @@ function createWorker(pool){
     setImmediate(async()=>{
       try{
         for(let n=0;n<3;n++){
-          const result=await pool.query(`UPDATE importacao_urls SET status='processando',atualizado_em=NOW(),erro=NULL WHERE id=(SELECT id FROM importacao_urls WHERE status='pendente' AND fornecedor='AliExpress' ORDER BY criado_em,id FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING id,url`);
+          const result=await pool.query(`UPDATE importacao_urls SET status='processando',atualizado_em=NOW(),erro=NULL WHERE id=(SELECT id FROM importacao_urls WHERE status='pendente' AND fornecedor='AliExpress' ORDER BY criado_em,id FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING id,url,nome,imagem,dados_extraidos`);
           if(!result.rowCount)break;
           const item=result.rows[0];
           try{
-            const data=await extract(item.url);
+            // Prioriza captura local vinculada ao produto; não tenta substituir galeria validada.
+            const stored=item.dados_extraidos||{};
+            const gallery=Array.isArray(stored.imagens)?stored.imagens.filter(x=>typeof x==='string'&&x.startsWith('https://')).slice(0,12):[];
+            let data;
+            if (item.nome && (gallery.length || item.imagem)) {
+              data={...stored,nome:item.nome,imagem:gallery[0]||item.imagem,imagens:gallery.length?gallery:[item.imagem],url_origem:item.url,origem:'captura_local_selenium',preco:null,estoque:null,preco_confirmado:false};
+            } else {
+              const extracted=await extract(item.url);
+              data={...stored,...extracted,imagens:gallery.length?gallery:extracted.imagens,imagem:gallery[0]||extracted.imagem,nome:item.nome||extracted.nome,preco:null,estoque:null,preco_confirmado:false};
+            }
             await pool.query(`UPDATE importacao_urls SET status='revisao',nome=$2,imagem=$3,dados_extraidos=$4,atualizado_em=NOW() WHERE id=$1`,[item.id,data.nome,data.imagem,JSON.stringify(data)]);
             last.revisao++;
           }catch(e){await pool.query(`UPDATE importacao_urls SET status='erro',erro=$2,atualizado_em=NOW() WHERE id=$1`,[item.id,String(e.message).slice(0,400)]);last.erros++}

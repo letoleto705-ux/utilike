@@ -1,0 +1,18 @@
+UTI LIKE - Integração de imagens da Garimpagem ao Neon/Cron Job
+
+ARQUIVOS ALTERADOS: garimpagem.py, bulk-import-routes.js, import-worker.js.
+NÃO substitua o server.js atual, pois ele já possui a rota /api/garimpagem/lotes protegida por GARIMPAGEM_API_KEY.
+
+1. Faça backup dos três arquivos atuais.
+2. Substitua bulk-import-routes.js e import-worker.js na raiz do projeto Uti Like.
+3. Faça commit/push apenas desses dois arquivos JS. Garimpagem fica local, ignorada pelo Git.
+4. Aguarde o deploy do Render. Não altere GARIMPAGEM_API_KEY ou DATABASE_URL.
+5. Substitua somente garimpagem.py na pasta local da Garimpagem.
+6. Use Carregar progresso, confirme 3 URLs e capture as imagens se ainda não estiverem no progresso.
+7. Clique Enviar URLs ao Neon. Verifique no log quantas galerias foram recebidas e quantos registros existentes foram atualizados.
+8. Atualize cronjob.html; as URLs existentes podem continuar pendentes. Clique Iniciar importação (até 3 URLs) somente após conferir que a galeria foi recebida.
+
+ATENÇÃO: Não há publicação automática. Registros com título e galeria passam a revisão. Se título estiver ausente, o worker ainda tentará metadados públicos e pode dar erro. Preço/estoque/frete continuam não verificados. Imagens são LINKS HTTPS (não arquivos hospedados), podem expirar.
+
+Sem migração SQL: campos imagem e dados_extraidos JSONB já existem no schema do pacote anterior.
+Testes locais de sintaxe não substituem teste no Render/Neon.

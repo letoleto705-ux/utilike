@@ -24,26 +24,61 @@ module.exports = pool => {
   r.get('/processamento',(req,res)=>res.json(worker.status()));
   r.post('/lotes', async (req,res,next) => {
     try {
-      const { urls, fornecedor = 'auto' } = req.body || {};
-      if (!Array.isArray(urls) || urls.length < 1 || urls.length > 1000 || !['auto',...ALLOWED].includes(fornecedor)) return res.status(400).json({ erro:'Envie de 1 a 1000 URLs e fornecedor válido.' });
+      const { urls, produtos, fornecedor = 'auto' } = req.body || {};
+      // Compatibilidade: clientes antigos enviam apenas urls; novos enviam produtos vinculados.
+      const hasProducts = Array.isArray(produtos);
+      const inputList = hasProducts ? produtos : urls;
+      if (!Array.isArray(inputList) || inputList.length < 1 || inputList.length > 1000 || !['auto',...ALLOWED].includes(fornecedor)) return res.status(400).json({ erro:'Envie de 1 a 1000 produtos ou URLs e fornecedor válido.' });
       const entries = [];
-      for (const input of urls) {
-        try { const url=validate(input); entries.push({url, fornecedor:fornecedor==='auto'?identify(url):fornecedor}); }
-        catch(e){ return res.status(400).json({erro:`URL inválida na linha ${entries.length+1}: ${e.message}`}); }
+      for (let i=0;i<inputList.length;i++) {
+        try {
+          const raw = hasProducts ? inputList[i] : {url:inputList[i]};
+          if (!raw || typeof raw !== 'object') throw Error('Registro inválido');
+          const url=validate(raw.url);
+          const pics = Array.isArray(raw.imagens) ? raw.imagens : [];
+          if (pics.length > 12) throw Error('Máximo de 12 imagens por produto');
+          const imagens = [...new Set(pics.map(validate))];
+          // Apenas CDN conhecida do fornecedor; evita associar imagem arbitrária.
+          for (const pic of imagens) {
+            const h=new URL(pic).hostname.toLowerCase();
+            if (!['alicdn.com','aliexpress-media.com'].some(d=>h===d||h.endsWith('.'+d))) throw Error('Domínio de imagem não autorizado');
+          }
+          const nome=typeof raw.titulo==='string'?raw.titulo.trim().slice(0,250):'';
+          const categoria=typeof raw.categoria==='string'?raw.categoria.trim().slice(0,120):'';
+          const fornecedorReal=fornecedor==='auto'?identify(url):fornecedor;
+          if (imagens.length && fornecedorReal !== 'AliExpress') throw Error('Galeria disponível apenas para AliExpress');
+          entries.push({url, fornecedor:fornecedorReal, nome, categoria, imagens});
+        } catch(e){ return res.status(400).json({erro:`Registro ${i+1}: ${e.message}`}); }
       }
       const unique = [...new Map(entries.map(x=>[x.url,x])).values()];
       const client=await pool.connect();
       try {
         await client.query('BEGIN');
         const job=await client.query('INSERT INTO importacao_lotes (total, criado_por) VALUES ($1,$2) RETURNING id',[unique.length,req.user.usuario]);
-        let inserted=0;
+        let inserted=0, atualizadas=0, comImagens=0;
         for(const x of unique){
-          const result=await client.query(`INSERT INTO importacao_urls (url,fornecedor,status,lote_id) VALUES ($1,$2,'pendente',$3) ON CONFLICT (url) DO NOTHING RETURNING id`,[x.url,x.fornecedor,job.rows[0].id]);
+          const hasGallery=x.imagens.length>0;
+          const dados=hasGallery?JSON.stringify({nome:x.nome||null,categoria:x.categoria,imagens:x.imagens,imagem:x.imagens[0],url_origem:x.url,origem:'captura_local_selenium',preco:null,estoque:null,preco_confirmado:false}):null;
+          // Mantém revisões já existentes. Nunca publica na vitrine.
+          const result=await client.query(`INSERT INTO importacao_urls (url,fornecedor,status,lote_id,nome,imagem,dados_extraidos)
+            VALUES ($1,$2,'pendente',$3,$4,$5,$6)
+            ON CONFLICT (url) DO NOTHING RETURNING id`,[x.url,x.fornecedor,job.rows[0].id,x.nome||null,x.imagens[0]||null,dados]);
           inserted+=result.rowCount;
+          if(hasGallery){
+            comImagens++;
+            if(!result.rowCount){
+              const updated=await client.query(`UPDATE importacao_urls SET
+                nome=COALESCE(NULLIF($2,''),nome),imagem=$3,
+                dados_extraidos=COALESCE(dados_extraidos,'{}'::jsonb) || $4::jsonb,
+                atualizado_em=NOW()
+                WHERE url=$1 RETURNING id`,[x.url,x.nome,x.imagens[0],dados]);
+              atualizadas+=updated.rowCount;
+            }
+          }
         }
         await client.query('UPDATE importacao_lotes SET inseridos=$1 WHERE id=$2',[inserted,job.rows[0].id]);
         await client.query('COMMIT');
-        res.status(201).json({ok:true,lote:job.rows[0].id,recebidas:urls.length,unicas:unique.length,inseridas:inserted,duplicadas:unique.length-inserted});
+        res.status(201).json({ok:true,lote:job.rows[0].id,recebidas:inputList.length,unicas:unique.length,inseridas:inserted,duplicadas:unique.length-inserted,galeriasRecebidas:comImagens,registrosAtualizados:atualizadas});
       }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
     }catch(e){next(e)}
   });
