@@ -20,6 +20,15 @@ function validate(raw) {
 module.exports = pool => {
   const r = Router();
   const worker = createWorker(pool);
+  // Sincroniza a galeria com tabela própria, sem publicar produtos.
+  async function salvarGaleria(db, produtoId, imagens) {
+    if (!Array.isArray(imagens) || !imagens.length) return;
+    await db.query('DELETE FROM importacao_imagens WHERE importacao_url_id=$1',[produtoId]);
+    for(let i=0;i<imagens.length;i++) {
+      await db.query('INSERT INTO importacao_imagens(importacao_url_id,url_imagem,ordem) VALUES($1,$2,$3)',[produtoId,imagens[i],i+1]);
+    }
+  }
+
   r.post('/processar',async(req,res,next)=>{try{res.json(await worker.start())}catch(e){next(e)}});
   r.get('/processamento',(req,res)=>res.json(worker.status()));
   r.post('/lotes', async (req,res,next) => {
@@ -64,6 +73,7 @@ module.exports = pool => {
             VALUES ($1,$2,'pendente',$3,$4,$5,$6)
             ON CONFLICT (url) DO NOTHING RETURNING id`,[x.url,x.fornecedor,job.rows[0].id,x.nome||null,x.imagens[0]||null,dados]);
           inserted+=result.rowCount;
+          if(hasGallery && result.rows[0]) await salvarGaleria(client,result.rows[0].id,x.imagens);
           if(hasGallery){
             comImagens++;
             if(!result.rowCount){
@@ -72,6 +82,7 @@ module.exports = pool => {
                 dados_extraidos=COALESCE(dados_extraidos,'{}'::jsonb) || $4::jsonb,
                 atualizado_em=NOW()
                 WHERE url=$1 RETURNING id`,[x.url,x.nome,x.imagens[0],dados]);
+              if(updated.rows[0]) await salvarGaleria(client,updated.rows[0].id,x.imagens);
               atualizadas+=updated.rowCount;
             }
           }
@@ -91,12 +102,15 @@ module.exports = pool => {
     const data={nome:String(nome||'').slice(0,250),descricao:String(descricao||'').slice(0,2000),imagens:pics,imagem:pics[0]||null,categoria:String(categoria||'').slice(0,120),observacoes:String(observacoes||'').slice(0,500),url_origem:clean,origem:'captura_local_selenium',preco:null,estoque:null,frete_gratis:null,envio_brasil:null,fornecedor_brasil:null,preco_confirmado:false};
     if(!data.nome||!pics.length)return res.status(400).json({erro:'Capture ao menos título e uma imagem antes de enviar.'});
     const r0=await pool.query(`INSERT INTO importacao_urls(url,fornecedor,status,nome,imagem,dados_extraidos,atualizado_em) VALUES ($1,'AliExpress','revisao',$2,$3,$4,NOW()) ON CONFLICT(url) DO UPDATE SET nome=EXCLUDED.nome,imagem=EXCLUDED.imagem,dados_extraidos=EXCLUDED.dados_extraidos,status='revisao',erro=NULL,atualizado_em=NOW() RETURNING id,status`,[clean,data.nome,data.imagem,JSON.stringify(data)]);
+    await salvarGaleria(pool,r0.rows[0].id,pics);
     res.json({ok:true,id:r0.rows[0].id,status:'revisao',mensagem:'Captura recebida no Neon. Preço, estoque, origem e frete aguardam verificação.'});
   }catch(e){next(e)}});
   r.get('/fila',async(req,res,next)=>{try{
     const [stats,rows]=await Promise.all([
       pool.query('SELECT status, count(*)::int AS quantidade FROM importacao_urls GROUP BY status'),
-      pool.query('SELECT id,url,fornecedor,status,atualizado_em,erro FROM importacao_urls ORDER BY criado_em DESC LIMIT 100')
+      pool.query(`SELECT u.id,u.url,u.fornecedor,u.status,u.atualizado_em,u.erro,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('url',i.url_imagem,'ordem',i.ordem) ORDER BY i.ordem) FROM importacao_imagens i WHERE i.importacao_url_id=u.id),'[]'::jsonb) AS imagens
+        FROM importacao_urls u ORDER BY u.criado_em DESC LIMIT 100`)
     ]);
     res.set('Cache-Control','no-store');res.json({resumo:stats.rows,itens:rows.rows,limite:100});
   }catch(e){next(e)}});
