@@ -93,5 +93,25 @@
     "preco_observado": null,
     "moeda_observada": null,
     "preco_status": "nao_verificado"
+  },
+  {
+    "url": "https://pt.aliexpress.com/item/1005012766060753.html",
+    "categoria": "Eletrônicos",
+    "imagens": [],
+    "titulo": "",
+    "captura_imagens": "nao_verificado",
+    "preco_observado": null,
+    "moeda_observada": null,
+    "preco_status": "nao_verificado"
+  },
+  {
+    "url": "https://pt.aliexpress.com/item/1005006191602162.html",
+    "categoria": "Eletrônicos",
+    "imagens": [],
+    "titulo": "",
+    "captura_imagens": "nao_verificado",
+    "preco_observado": null,
+    "moeda_observada": null,
+    "preco_status": "nao_verificado"
   }
 ]

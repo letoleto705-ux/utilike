@@ -61,7 +61,7 @@ module.exports = pool => {
         await db.query("UPDATE config SET valor=$1::jsonb WHERE chave='produtos'",[JSON.stringify(clean)]);
         // Tabelas auxiliares: exclusão explícita para compatibilidade com esquemas antigos.
         await db.query('DELETE FROM importacao_imagens WHERE importacao_url_id=$1',[id]);
-        await db.query('DELETE FROM importacao_precos WHERE importacao_url_id=$1',[id]);
+        if((await db.query("SELECT to_regclass('public.importacao_precos') AS tabela")).rows[0].tabela) await db.query('DELETE FROM importacao_precos WHERE importacao_url_id=$1',[id]);
         await db.query('DELETE FROM importacao_urls WHERE id=$1',[id]);
       }else if(acao==='desativar'){
         // Guarda cópia do anúncio publicado no registro da URL para futura reativação.
@@ -132,7 +132,7 @@ module.exports = pool => {
         for(const x of unique){
           const hasGallery=x.imagens.length>0;
           // Não apagar dados comerciais anteriores quando uma nova captura falhar.
-          const dados=JSON.stringify({nome:x.nome||null,categoria:x.categoria,imagens:x.imagens,imagem:x.imagens[0]||null,url_origem:x.url,origem:'captura_local_selenium',preco:null,estoque:null,preco_confirmado:false});
+          const dados=JSON.stringify({...(x.nome?{nome:x.nome}:{}),...(x.categoria?{categoria:x.categoria}:{}),...(x.imagens.length?{imagens:x.imagens,imagem:x.imagens[0]}:{}),url_origem:x.url,origem:'captura_local_selenium',preco_confirmado:false});
           // Mantém revisões já existentes. Nunca publica na vitrine.
           const result=await client.query(`INSERT INTO importacao_urls (url,fornecedor,status,lote_id,nome,imagem,dados_extraidos)
             VALUES ($1,$2,'pendente',$3,$4,$5,$6)
@@ -181,18 +181,22 @@ module.exports = pool => {
     await salvarGaleria(pool,r0.rows[0].id,pics);
     res.json({ok:true,id:r0.rows[0].id,status:'revisao',mensagem:'Captura recebida no Neon. Preço, estoque, origem e frete aguardam verificação.'});
   }catch(e){next(e)}});
-  r.get('/fila',async(req,res,next)=>{try{
-    const [stats,rows]=await Promise.all([
-      pool.query('SELECT status, count(*)::int AS quantidade FROM importacao_urls GROUP BY status'),
-      pool.query(`SELECT u.id,u.url,u.fornecedor,u.status,u.atualizado_em,u.erro,
-        COALESCE((u.dados_extraidos->>'desativado_vitrine')::boolean,false) AS desativado_vitrine,
-        (SELECT p.preco_custo FROM importacao_precos p WHERE p.importacao_url_id=u.id AND p.preco_custo IS NOT NULL ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS preco_observado,
-        (SELECT p.frete_status FROM importacao_precos p WHERE p.importacao_url_id=u.id ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS frete_status,
-        (SELECT p.valor_frete FROM importacao_precos p WHERE p.importacao_url_id=u.id AND p.valor_frete IS NOT NULL ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS valor_frete,
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('url',i.url_imagem,'ordem',i.ordem) ORDER BY i.ordem) FROM importacao_imagens i WHERE i.importacao_url_id=u.id),'[]'::jsonb) AS imagens
-        FROM importacao_urls u ORDER BY u.criado_em DESC LIMIT 100`)
-    ]);
-    res.set('Cache-Control','no-store');res.json({resumo:stats.rows,itens:rows.rows,limite:100});
-  }catch(e){next(e)}});
-  return r;
+     r.get('/fila',async(req,res,next)=>{try{
+     const hasPrices=Boolean((await pool.query("SELECT to_regclass('public.importacao_precos') AS tabela")).rows[0].tabela);
+     const stats=await pool.query('SELECT status,count(*)::int AS quantidade FROM importacao_urls GROUP BY status');
+     const priceColumns=hasPrices ? `
+       (SELECT p.preco_custo FROM importacao_precos p WHERE p.importacao_url_id=u.id AND p.preco_custo IS NOT NULL ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS preco_observado,
+       (SELECT p.frete_status FROM importacao_precos p WHERE p.importacao_url_id=u.id ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS frete_status,
+       (SELECT p.valor_frete FROM importacao_precos p WHERE p.importacao_url_id=u.id AND p.valor_frete IS NOT NULL ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS valor_frete,`
+       : `CASE WHEN (u.dados_extraidos->>'preco_observado') ~ '^[0-9]{1,8}(\\.[0-9]{1,2})?$' THEN (u.dados_extraidos->>'preco_observado')::numeric ELSE NULL END AS preco_observado,
+       u.dados_extraidos->>'frete_status' AS frete_status,
+       CASE WHEN (u.dados_extraidos->>'frete_observado') ~ '^[0-9]{1,8}(\\.[0-9]{1,2})?$' THEN (u.dados_extraidos->>'frete_observado')::numeric ELSE NULL END AS valor_frete,`;
+     const rows=await pool.query(`SELECT u.id,u.url,u.fornecedor,u.status,u.atualizado_em,u.erro,
+       COALESCE((u.dados_extraidos->>'desativado_vitrine')::boolean,false) AS desativado_vitrine,
+       ${priceColumns}
+       COALESCE((SELECT jsonb_agg(jsonb_build_object('url',i.url_imagem,'ordem',i.ordem) ORDER BY i.ordem) FROM importacao_imagens i WHERE i.importacao_url_id=u.id),'[]'::jsonb) AS imagens
+       FROM importacao_urls u ORDER BY u.criado_em DESC LIMIT 100`);
+     res.set('Cache-Control','no-store').json({resumo:stats.rows,itens:rows.rows,limite:100,precosDisponiveis:hasPrices});
+   }catch(e){next(e)}});
+return r;
 };
