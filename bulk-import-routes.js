@@ -29,6 +29,80 @@ module.exports = pool => {
     }
   }
 
+
+  // Exclusão definitiva, exclusiva das rotas /api/admin/importacao
+  // protegidas no server.js por auth + soAdmin.
+  async function excluirProdutos(ids, req, res, next) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Serializa exclusões com atualizações do catálogo.
+      await client.query("INSERT INTO config(chave,valor) VALUES('produtos','[]'::jsonb) ON CONFLICT(chave) DO NOTHING");
+      const lockedCatalog = await client.query("SELECT valor FROM config WHERE chave='produtos' FOR UPDATE");
+      const catalog = lockedCatalog.rows[0].valor;
+      if (!Array.isArray(catalog)) throw new Error('Catálogo inválido; exclusão cancelada.');
+      const rows = await client.query('SELECT id,url FROM importacao_urls WHERE id=ANY($1::bigint[]) FOR UPDATE', [ids]);
+      if (rows.rows.length !== ids.length) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({erro:'A lista mudou. Atualize a fila antes de excluir.'});
+      }
+      const idsSet = new Set(ids.map(String));
+      const urlsSet = new Set(rows.rows.map(x=>x.url));
+      const removing = catalog.filter(p=>
+        idsSet.has(String(p.importacaoUrlId ?? '')) ||
+        idsSet.has(String(p.id ?? '').replace(/^garimpagem-/, '')) && /^garimpagem-/.test(String(p.id ?? '')) ||
+        (p.urlFornecedor && urlsSet.has(p.urlFornecedor))
+      );
+      const removeIds = new Set(removing.map(p=>String(p.id)));
+      const cleanCatalog = catalog.filter(p=>!removeIds.has(String(p.id)));
+      // Se já existem pedidos ligados ao produto, a exclusão física poderia
+      // comprometer histórico financeiro: recusa em vez de apagar pedidos.
+      const check = await client.query(
+        "SELECT to_regclass('public.pedidos') AS pedidos"
+      );
+      if (check.rows[0].pedidos && removeIds.size) {
+        const orderCols = await client.query(
+          "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='pedidos'"
+        );
+        const cols = new Set(orderCols.rows.map(x=>x.column_name));
+        if (cols.has('produto_id')) {
+          const existing = await client.query(
+            "SELECT 1 FROM pedidos WHERE produto_id::text=ANY($1::text[]) LIMIT 1",
+            [[...removeIds]]
+          );
+          if (existing.rowCount) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({erro:'Existe pedido vinculado a um dos produtos. Desative-o em vez de excluir o histórico.'});
+          }
+        }
+      }
+      await client.query("UPDATE config SET valor=$1::jsonb WHERE chave='produtos'", [JSON.stringify(cleanCatalog)]);
+      // importacao_imagens e importacao_precos possuem ON DELETE CASCADE.
+      // DELETE explícito evita órfãos em instalações anteriores sem cascade.
+      await client.query('DELETE FROM importacao_imagens WHERE importacao_url_id=ANY($1::bigint[])',[ids]);
+      await client.query('DELETE FROM importacao_precos WHERE importacao_url_id=ANY($1::bigint[])',[ids]);
+      const deleted = await client.query('DELETE FROM importacao_urls WHERE id=ANY($1::bigint[]) RETURNING id',[ids]);
+      await client.query('COMMIT');
+      res.set('Cache-Control','no-store').json({ok:true,excluidos:deleted.rowCount,removidosDaVitrine:removing.length});
+    } catch(e) {try{await client.query('ROLLBACK')}catch{} next(e)}
+    finally {client.release()}
+  }
+  r.delete('/produto/:id',async(req,res,next)=>{
+    const id=Number(req.params.id);
+    if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({erro:'ID inválido'});
+    if(req.body?.confirmacao!=='EXCLUIR')return res.status(400).json({erro:'Confirmação obrigatória'});
+    return excluirProdutos([id],req,res,next);
+  });
+  r.post('/excluir-todos',async(req,res,next)=>{
+    if(req.body?.confirmacao!=='EXCLUIR TODOS')return res.status(400).json({erro:'Confirmação obrigatória'});
+    try {
+      const r0=await pool.query('SELECT id FROM importacao_urls ORDER BY id');
+      if(!r0.rows.length)return res.json({ok:true,excluidos:0,removidosDaVitrine:0});
+      if(r0.rows.length>10000)return res.status(409).json({erro:'Mais de 10.000 registros. Exclusão em massa bloqueada.'});
+      return excluirProdutos(r0.rows.map(x=>Number(x.id)),req,res,next);
+    }catch(e){next(e)}
+  });
+
   r.post('/processar',async(req,res,next)=>{try{res.json(await worker.start())}catch(e){next(e)}});
   r.get('/processamento',(req,res)=>res.json(worker.status()));
   r.post('/lotes', async (req,res,next) => {
