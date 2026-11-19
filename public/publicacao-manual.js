@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id);
 const form=$('manualPublishForm');if(!form)return;let margemAtual=30;
 function token(){try{return JSON.parse(sessionStorage.getItem('utilike_auth_session')||'null')?.token||''}catch{return ''}}
-async function request(path,options={}){const t=token();if(!t)throw Error('Faça login como administrador na vitrine, nesta mesma aba.');const r=await fetch(path,{...options,headers:{Authorization:'Bearer '+t,...(options.headers||{})},cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.erro||`Falha HTTP ${r.status}`);return d}
+async function request(path,options={}){const t=token();if(!t)throw Error('Faça login como administrador na vitrine, nesta mesma aba.');const r=await fetch(path,{...options,headers:{Authorization:'Bearer '+t,...(options.headers||{})},cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error((d.erro?d.erro+' · ':'')+`HTTP ${r.status} em ${path}`);return d}
 const status=message=>{$('manualPublishStatus').textContent=message};
 async function carregarMarkup(){const d=await request('/api/admin/publicacao/markup');margemAtual=d.margem;$('markupMargem').value=String(margemAtual)}
 function calcular(){const custo=Number($('manualCusto').value);const margem=Number($('markupMargem').value);$('manualPreco').value=Number.isFinite(custo)&&custo>0&&Number.isFinite(margem)&&margem>=0&&margem<=80?(Math.ceil((custo/(1-margem/100)-1e-9)*100)/100).toFixed(2):''}
