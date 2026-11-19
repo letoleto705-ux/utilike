@@ -1517,6 +1517,31 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
 const bulkImport = require('./bulk-import-routes');
 app.use('/api/admin/importacao', auth, soAdmin, bulkImport(pool));
 
+// Canal separado para a Garimpagem local: chave de serviço, nunca JWT de cliente.
+// A chave fica somente nas variáveis do Render e no computador do operador.
+const { timingSafeEqual } = require('crypto');
+function autenticarGarimpagem(req, res, next) {
+  const expected = process.env.GARIMPAGEM_API_KEY || '';
+  const provided = req.get('X-Garimpagem-Key') || '';
+  if (expected.length < 32 || provided.length > 512 || !provided) {
+    return res.status(401).json({ erro: 'Chave de integração ausente ou não configurada.' });
+  }
+  const a = Buffer.from(expected, 'utf8');
+  const b = Buffer.from(provided, 'utf8');
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return res.status(401).json({ erro: 'Chave de integração inválida.' });
+  }
+  req.user = { usuario: 'garimpagem_local', perfil: 'integracao' };
+  next();
+}
+const rotasGarimpagem = bulkImport(pool);
+app.use('/api/garimpagem', autenticarGarimpagem, (req, res, next) => {
+  if (req.method !== 'POST' || !['/lotes', '/captura-local'].includes(req.path)) {
+    return res.status(404).json({ erro: 'Rota indisponível para integração.' });
+  }
+  next();
+}, rotasGarimpagem);
+
 app.use('/api', (req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
 app.use((err, req, res, next) => {
   console.error(`Erro na API ${req.method} ${req.originalUrl}:`, err);
