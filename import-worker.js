@@ -28,10 +28,10 @@ function createWorker(pool){
   let running=false;let last={executando:false,processados:0,revisao:0,erros:0,mensagem:'Aguardando início'};
   async function start(){
     if(running)return {iniciado:false,motivo:'Processamento já em andamento'};
-    running=true;last={executando:true,processados:0,revisao:0,erros:0,mensagem:'Processando até 3 URLs pendentes'};
+    running=true;last={executando:true,processados:0,revisao:0,erros:0,mensagem:'Processando URLs pendentes até esvaziar a fila'};
     setImmediate(async()=>{
       try{
-        for(let n=0;n<3;n++){
+        while(true){
           const result=await pool.query(`UPDATE importacao_urls SET status='processando',atualizado_em=NOW(),erro=NULL WHERE id=(SELECT id FROM importacao_urls WHERE status='pendente' AND fornecedor='AliExpress' ORDER BY criado_em,id FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING id,url,nome,imagem,dados_extraidos`);
           if(!result.rowCount)break;
           const item=result.rows[0];
@@ -55,7 +55,7 @@ function createWorker(pool){
       }catch(e){last.mensagem='Erro no processamento: '+String(e.message).slice(0,200)}
       finally{running=false;last.executando=false}
     });
-    return {iniciado:true,mensagem:'Processamento iniciado (máximo de 3 URLs)'};
+    return {iniciado:true,mensagem:'Processamento da fila iniciado'};
   }
   return {start,status:()=>({...last})};
 }

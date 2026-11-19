@@ -18,6 +18,7 @@ from tkinter import ttk, messagebox
 from urllib.parse import urlparse, quote, urljoin
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+from observador_precos import observe
 
 BASE = Path(__file__).resolve().parent
 DATA = BASE / 'dados_garimpagem'
@@ -78,7 +79,7 @@ def image_url(url):
 class App:
     def __init__(self, root):
         self.root=root
-        root.title('Uti Like | Garimpagem V6 (preços observados)')
+        root.title('Uti Like | Garimpagem V7 (preços observados)')
         root.geometry('1050x760');root.minsize(800,600)
         self.driver=None
         self.stop=threading.Event()
@@ -154,7 +155,7 @@ class App:
         opts=ttk.Frame(shell);opts.pack(fill='x',pady=2)
         ttk.Checkbutton(opts,text='Somente links de produtos (obrigatório)',variable=self.only_products,state='disabled').pack(side='left')
         controls=ttk.Frame(shell);controls.pack(fill='x',pady=6)
-        for label,cmd in [('Iniciar coleta por categoria',self.collect),('Parar',self.request_stop),('Salvar TXT/CSV',self.save),('Carregar progresso',self.load),('Capturar imagens dos produtos',self.capture_images)]:
+        for label,cmd in [('Iniciar coleta por categoria',self.collect),('Parar',self.request_stop),('Salvar TXT/CSV',self.save),('Carregar progresso',self.load),('Capturar imagens dos produtos',self.capture_images),('Verificar preços',self.verify_prices)]:
             ttk.Button(controls,text=label,command=cmd).pack(side='left',padx=(0,5))
         imgbar=ttk.Frame(shell);imgbar.pack(fill='x',pady=2)
         ttk.Label(imgbar,text='Produtos por execução:').pack(side='left')
@@ -392,8 +393,8 @@ class App:
         atomic_text(txt,'\n'.join(x['url'] for x in data)+'\n')
         import io
         buffer=io.StringIO(newline='')
-        w=csv.writer(buffer,delimiter=';');w.writerow(['fornecedor','categoria','url_produto','titulo','url_imagem_principal','total_imagens','status_imagens','preco_observado','moeda','status_preco','frete_status','frete_observado','origem_envio','disponibilidade_status','estoque_observado'])
-        for x in data:w.writerow(['AliExpress',x['categoria'],x['url'],x['titulo'],(x['imagens'] or [''])[0],len(x['imagens']),x['captura_imagens'],x.get('preco_observado') or '',x.get('moeda_observada') or '',x.get('preco_status','nao_verificado'),x.get('frete_status','nao_verificado'),x.get('frete_observado') if x.get('frete_observado') is not None else '',x.get('origem_envio') or '',x.get('disponibilidade_status') or 'nao_confirmado',x.get('estoque_observado') if x.get('estoque_observado') is not None else ''])
+        w=csv.writer(buffer,delimiter=';');w.writerow(['fornecedor','categoria','url_produto','titulo','url_imagem_principal','total_imagens','status_imagens','preco_observado','moeda','status_preco','frete_status','frete_observado','origem_envio','disponibilidade_status','estoque_observado','preco_tipo','preco_fonte','preco_verificado_em','preco_variante','preco_anterior_observado'])
+        for x in data:w.writerow(['AliExpress',x['categoria'],x['url'],x['titulo'],(x['imagens'] or [''])[0],len(x['imagens']),x['captura_imagens'],x.get('preco_observado') or '',x.get('moeda_observada') or '',x.get('preco_status','nao_verificado'),x.get('frete_status','nao_verificado'),x.get('frete_observado') if x.get('frete_observado') is not None else '',x.get('origem_envio') or '',x.get('disponibilidade_status') or 'nao_confirmado',x.get('estoque_observado') if x.get('estoque_observado') is not None else '',x.get('preco_tipo') or '',x.get('preco_fonte') or '',x.get('preco_verificado_em') or '',x.get('preco_variante') or '',x.get('preco_anterior_observado') if x.get('preco_anterior_observado') is not None else ''])
         atomic_text(csvfile,buffer.getvalue(),encoding='utf-8-sig')
         buffer=io.StringIO(newline='')
         w=csv.writer(buffer,delimiter=';');w.writerow(['id_produto','url_produto','categoria','ordem','url_imagem','status_validacao'])
@@ -415,7 +416,7 @@ class App:
                 for x in data:
                     if not isinstance(x,dict):continue
                     u=canonical(x.get('url',''))
-                    if u and u not in self.items:self.items[u]={k:x.get(k) for k in ('categoria','imagens','titulo','captura_imagens','preco_observado','moeda_observada','preco_status','frete_status','frete_observado','frete_texto','origem_envio','origem_envio_texto','disponibilidade_status','estoque_observado','estoque_texto')}
+                    if u and u not in self.items:self.items[u]={k:x.get(k) for k in ('categoria','imagens','titulo','captura_imagens','preco_observado','moeda_observada','preco_status','frete_status','frete_observado','frete_texto','origem_envio','origem_envio_texto','disponibilidade_status','estoque_observado','estoque_texto','preco_tipo','preco_fonte','preco_verificado_em','preco_variante','preco_url_observada','preco_anterior_observado')}
             self.logmsg(f'Progresso recuperado: {len(self.items)} URLs únicas.')
         except (ValueError,OSError,TypeError) as e:
             if silent:self.logmsg('Progresso não carregado: '+str(e)[:150])
@@ -569,6 +570,48 @@ class App:
                 if done%5==0:self.save_files()
                 if self.stop.wait(2):break
             self.save_files();self.logmsg('Captura concluída. Confira imagens_produtos.csv; URLs podem expirar ou ser bloqueadas.')
+        self.run(task)
+
+    def verify_prices(self):
+        """Etapa independente; percorre inclusive produtos ja verificados para atualizar precos."""
+        with self.lock:
+            urls=list(self.items.keys())
+        if not urls:
+            messagebox.showwarning('Sem produtos','Colete URLs ou carregue o progresso antes de verificar preços.')
+            return
+        if not messagebox.askyesno('Verificar preços',f'Consultar novamente o preço de {len(urls)} produto(s)?\nO processo pode demorar; valores não encontrados ficarão em revisão.'):
+            return
+        def task():
+            driver=self.browser()
+            self.stop.clear()
+            ok=0
+            for i,u in enumerate(urls,1):
+                if self.stop.is_set():break
+                try:
+                    driver.get(u)
+                    if self.stop.wait(4):break
+                    result=observe(driver)
+                    with self.lock:
+                        item=self.items.get(u)
+                        if item is None:continue
+                        previous=item.get('preco_observado')
+                        item['preco_anterior_observado']=previous
+                        # Uma nova leitura inconclusiva nunca vira preço confirmado.
+                        item.update(result)
+                    if result['preco_observado'] is not None:ok+=1
+                    self.logmsg(f'Preço {i}/{len(urls)}: {result["preco_observado"] if result["preco_observado"] is not None else "REVISÃO"} | {result["preco_status"]} | {u}')
+                except Exception as exc:
+                    with self.lock:
+                        if u in self.items:
+                            self.items[u]['preco_anterior_observado']=self.items[u].get('preco_observado')
+                            self.items[u]['preco_observado']=None
+                            self.items[u]['moeda_observada']=None
+                            self.items[u]['preco_status']='revisao_erro_na_leitura'
+                    self.logmsg(f'Preço {i}/{len(urls)}: falha na leitura; revisão necessária ({str(exc)[:100]})')
+                if i%5==0:self.save_files()
+                if self.stop.wait(1.5):break
+            self.save_files()
+            self.logmsg(f'Verificação de preços finalizada: {ok} identificado(s), {len(urls)-ok} pendente(s) ou não processado(s). CSV atualizado.')
         self.run(task)
 
     def send(self):
