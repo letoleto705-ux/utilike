@@ -1516,6 +1516,8 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
 // Fila de URLs: apenas registra e acompanha importação. Não publica produtos sem dados verificados.
 const bulkImport = require('./bulk-import-routes');
 app.use('/api/admin/importacao', auth, soAdmin, bulkImport(pool));
+// Aprovação manual: somente administrador, sem publicação automática.
+app.use('/api/admin/publicacao', auth, soAdmin, require('./aprovacao-manual-routes')(pool));
 
 // Canal separado para a Garimpagem local: chave de serviço, nunca JWT de cliente.
 // A chave fica somente nas variáveis do Render e no computador do operador.
