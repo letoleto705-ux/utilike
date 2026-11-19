@@ -58,7 +58,13 @@ module.exports = pool => {
           if (imagens.length && fornecedorReal !== 'AliExpress') throw Error('Galeria disponível apenas para AliExpress');
           const precoObs=raw.preco_observado;
           const precoValido=typeof precoObs==='number' && Number.isFinite(precoObs) && precoObs>0 && precoObs<=1000000 && raw.moeda_observada==='BRL' && raw.preco_status==='observado_na_pagina_nao_confirmado';
-          entries.push({url, fornecedor:fornecedorReal, nome, categoria, imagens, precoObservado:precoValido?Math.round(precoObs*100)/100:null});
+          const freteStatus=typeof raw.frete_status==='string'?raw.frete_status:'frete_nao_confirmado';
+          const fretePermitidos=['frete_gratis_observado','frete_pago_observado','frete_nao_confirmado','revisao_frete_contraditorio','nao_verificado'];
+          if(!fretePermitidos.includes(freteStatus)) throw Error('Situação do frete inválida');
+          const freteValor=raw.frete_observado;
+          const freteNumerico=typeof freteValor==='number' && Number.isFinite(freteValor) && freteValor>=0 && freteValor<=1000000 ? Math.round(freteValor*100)/100 : null;
+          const freteCoerente=(freteStatus==='frete_gratis_observado' && freteNumerico===0)||(freteStatus==='frete_pago_observado' && freteNumerico!==null && freteNumerico>0);
+          entries.push({url, fornecedor:fornecedorReal, nome, categoria, imagens, precoObservado:precoValido?Math.round(precoObs*100)/100:null,freteStatus:freteCoerente?freteStatus:'frete_nao_confirmado',freteValor:freteCoerente?freteNumerico:null});
         } catch(e){ return res.status(400).json({erro:`Registro ${i+1}: ${e.message}`}); }
       }
       const unique = [...new Map(entries.map(x=>[x.url,x])).values()];
@@ -69,14 +75,15 @@ module.exports = pool => {
         let inserted=0, atualizadas=0, comImagens=0;
         for(const x of unique){
           const hasGallery=x.imagens.length>0;
-          const dados=JSON.stringify({nome:x.nome||null,categoria:x.categoria,imagens:x.imagens,imagem:x.imagens[0]||null,url_origem:x.url,origem:'captura_local_selenium',preco:null,preco_observado:x.precoObservado,moeda_observada:x.precoObservado!==null?'BRL':null,preco_status:x.precoObservado!==null?'observado_na_pagina_nao_confirmado':'nao_verificado',estoque:null,preco_confirmado:false});
+          // Não apagar dados comerciais anteriores quando uma nova captura falhar.
+          const dados=JSON.stringify({nome:x.nome||null,categoria:x.categoria,imagens:x.imagens,imagem:x.imagens[0]||null,url_origem:x.url,origem:'captura_local_selenium',preco:null,estoque:null,preco_confirmado:false});
           // Mantém revisões já existentes. Nunca publica na vitrine.
           const result=await client.query(`INSERT INTO importacao_urls (url,fornecedor,status,lote_id,nome,imagem,dados_extraidos)
             VALUES ($1,$2,'pendente',$3,$4,$5,$6)
             ON CONFLICT (url) DO NOTHING RETURNING id`,[x.url,x.fornecedor,job.rows[0].id,x.nome||null,x.imagens[0]||null,dados]);
           inserted+=result.rowCount;
           if(hasGallery && result.rows[0]) await salvarGaleria(client,result.rows[0].id,x.imagens);
-          if(hasGallery || x.precoObservado!==null){
+          if(hasGallery || x.precoObservado!==null || x.freteValor!==null){
             if(hasGallery) comImagens++;
             if(!result.rowCount){
               const updated=await client.query(`UPDATE importacao_urls SET
@@ -87,6 +94,17 @@ module.exports = pool => {
               if(updated.rows[0] && hasGallery) await salvarGaleria(client,updated.rows[0].id,x.imagens);
               atualizadas+=updated.rowCount;
             }
+          }
+          const saved=await client.query('SELECT id FROM importacao_urls WHERE url=$1',[x.url]);
+          if(saved.rows[0] && (x.precoObservado!==null || x.freteValor!==null)){
+            const productId=saved.rows[0].id;
+            const shippingFree=x.freteStatus==='frete_gratis_observado'?true:x.freteStatus==='frete_pago_observado'?false:null;
+            await client.query(`INSERT INTO importacao_precos(importacao_url_id,preco_custo,moeda,preco_status,frete_gratis,valor_frete,frete_status,origem,capturado_em)
+              VALUES($1,$2,'BRL',$3,$4,$5,$6,'garimpagem',NOW())`,[productId,x.precoObservado,x.precoObservado!==null?'observado_na_pagina_nao_confirmado':'nao_verificado',shippingFree,x.freteValor,x.freteStatus]);
+            const commercial={};
+            if(x.precoObservado!==null)Object.assign(commercial,{preco_observado:x.precoObservado,moeda_observada:'BRL',preco_status:'observado_na_pagina_nao_confirmado'});
+            if(x.freteValor!==null)Object.assign(commercial,{frete_gratis:shippingFree,frete_observado:x.freteValor,frete_status:x.freteStatus});
+            await client.query(`UPDATE importacao_urls SET dados_extraidos=COALESCE(dados_extraidos,'{}'::jsonb)||$2::jsonb,atualizado_em=NOW() WHERE id=$1`,[productId,JSON.stringify(commercial)]);
           }
         }
         await client.query('UPDATE importacao_lotes SET inseridos=$1 WHERE id=$2',[inserted,job.rows[0].id]);
@@ -111,6 +129,9 @@ module.exports = pool => {
     const [stats,rows]=await Promise.all([
       pool.query('SELECT status, count(*)::int AS quantidade FROM importacao_urls GROUP BY status'),
       pool.query(`SELECT u.id,u.url,u.fornecedor,u.status,u.atualizado_em,u.erro,
+        (SELECT p.preco_custo FROM importacao_precos p WHERE p.importacao_url_id=u.id AND p.preco_custo IS NOT NULL ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS preco_observado,
+        (SELECT p.frete_status FROM importacao_precos p WHERE p.importacao_url_id=u.id ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS frete_status,
+        (SELECT p.valor_frete FROM importacao_precos p WHERE p.importacao_url_id=u.id AND p.valor_frete IS NOT NULL ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS valor_frete,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('url',i.url_imagem,'ordem',i.ordem) ORDER BY i.ordem) FROM importacao_imagens i WHERE i.importacao_url_id=u.id),'[]'::jsonb) AS imagens
         FROM importacao_urls u ORDER BY u.criado_em DESC LIMIT 100`)
     ]);

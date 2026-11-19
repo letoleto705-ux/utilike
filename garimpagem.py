@@ -392,8 +392,8 @@ class App:
         atomic_text(txt,'\n'.join(x['url'] for x in data)+'\n')
         import io
         buffer=io.StringIO(newline='')
-        w=csv.writer(buffer,delimiter=';');w.writerow(['fornecedor','categoria','url_produto','titulo','url_imagem_principal','total_imagens','status_imagens','preco_observado','moeda','status_preco'])
-        for x in data:w.writerow(['AliExpress',x['categoria'],x['url'],x['titulo'],(x['imagens'] or [''])[0],len(x['imagens']),x['captura_imagens'],x.get('preco_observado') or '',x.get('moeda_observada') or '',x.get('preco_status','nao_verificado')])
+        w=csv.writer(buffer,delimiter=';');w.writerow(['fornecedor','categoria','url_produto','titulo','url_imagem_principal','total_imagens','status_imagens','preco_observado','moeda','status_preco','frete_status','frete_observado'])
+        for x in data:w.writerow(['AliExpress',x['categoria'],x['url'],x['titulo'],(x['imagens'] or [''])[0],len(x['imagens']),x['captura_imagens'],x.get('preco_observado') or '',x.get('moeda_observada') or '',x.get('preco_status','nao_verificado'),x.get('frete_status','nao_verificado'),x.get('frete_observado') if x.get('frete_observado') is not None else ''])
         atomic_text(csvfile,buffer.getvalue(),encoding='utf-8-sig')
         buffer=io.StringIO(newline='')
         w=csv.writer(buffer,delimiter=';');w.writerow(['id_produto','url_produto','categoria','ordem','url_imagem','status_validacao'])
@@ -415,7 +415,7 @@ class App:
                 for x in data:
                     if not isinstance(x,dict):continue
                     u=canonical(x.get('url',''))
-                    if u and u not in self.items:self.items[u]={k:x.get(k) for k in ('categoria','imagens','titulo','captura_imagens','preco_observado','moeda_observada','preco_status')}
+                    if u and u not in self.items:self.items[u]={k:x.get(k) for k in ('categoria','imagens','titulo','captura_imagens','preco_observado','moeda_observada','preco_status','frete_status','frete_observado','frete_texto')}
             self.logmsg(f'Progresso recuperado: {len(self.items)} URLs únicas.')
         except (ValueError,OSError,TypeError) as e:
             if silent:self.logmsg('Progresso não carregado: '+str(e)[:150])
@@ -428,7 +428,7 @@ class App:
             messagebox.showwarning('Limite','Use de 1 a 500 produtos por execução e 1 a 30 imagens por produto.');return
         def task():
             driver=self.browser();self.stop.clear();done=0
-            with self.lock:urls=[u for u,x in self.items.items() if x.get('captura_imagens') not in ('galeria_identificada',)]
+            with self.lock:urls=[u for u,x in self.items.items() if x.get('captura_imagens') not in ('galeria_identificada',) or not x.get('preco_observado') or not x.get('frete_status')]
             for u in urls[:limit]:
                 if self.stop.is_set():break
                 driver.get(u)
@@ -458,15 +458,29 @@ class App:
                 const title=document.querySelector('meta[property="og:title"]')?.content||document.title||'';
                 const og=document.querySelector('meta[property="og:image"]')?.content||'';
                 // OG é fallback somente quando a página é individual de produto.
-                // Observação visual, NÃO custo confirmado. Não adivinhar moeda nem variante.
-                const priceSelectors=['[class*="product-price"] [class*="price"]','[class*="price--current"]','[class*="price-current"]','[class*="price--original"]'];
-                const priceTexts=[];
-                for(const sel of priceSelectors){try{for(const el of document.querySelectorAll(sel)){
-                  if(el.getClientRects().length && !el.closest('[class*="recommend"],[class*="review"],del,s')){
-                    const t=(el.innerText||'').trim();if(t && t.length<90)priceTexts.push(t);
+                // Prioriza o preço atual principal visível; não lê preço riscado/parcelas.
+                // Seletores baseados nos prints de DevTools, sujeitos a mudanças no site.
+                const priceSelectors=['[class*="price-default--current"]','[class*="price--current"]','[class*="price-current"]','[class*="product-price"] [class*="current"]'];
+                const visible=el=>!!el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden';
+                const excluded=el=>!!el.closest('del,s,[class*="original"],[class*="oldPrice"],[class*="installment"],[class*="recommend"],[class*="review"]');
+                let priceTexts=[];
+                for(const sel of priceSelectors){
+                  const matches=[];
+                  for(const el of document.querySelectorAll(sel)){
+                    if(!visible(el)||excluded(el))continue;
+                    const t=(el.innerText||el.textContent||'').trim();
+                    if(t.length<100&&/R\$\s*[\d.,]+/.test(t))matches.push(t);
                   }
-                }}catch(e){}}
-                return {title,imgs:candidates,og,priceTexts:[...new Set(priceTexts)].slice(0,8)};
+                  if(matches.length){priceTexts=[...new Set(matches)].slice(0,8);break;}
+                }
+                const shippingSelectors=['[class*="dynamic-shipping-contentLayout"]','[class*="dynamic-shipping-line"]','[class*="shipping-content"]','[class*="shipping-info"]'];
+                const shippingTexts=[];
+                for(const sel of shippingSelectors)for(const el of document.querySelectorAll(sel)){
+                  if(!visible(el)||excluded(el))continue;
+                  const t=(el.innerText||el.textContent||'').replace(/\s+/g,' ').trim();
+                  if(t&&t.length<240)shippingTexts.push(t);
+                }
+                return {title,imgs:candidates,og,priceTexts,shippingTexts:[...new Set(shippingTexts)].slice(0,8)};
                 """)
                 found=[];seen=set()
                 for raw_url in raw.get('imgs',[]):
@@ -488,7 +502,22 @@ class App:
                         except ValueError:pass
                 price_candidates=set(price_candidates)
                 price_value=next(iter(price_candidates)) if len(price_candidates)==1 else None
+                shipping_texts=raw.get('shippingTexts',[])
+                shipping_joined=' | '.join(str(x) for x in shipping_texts)
+                free=bool(re.search(r'frete\s+gr[aá]tis|envio\s+gr[aá]tis',shipping_joined,re.I))
+                shipping_prices=[]
+                for text in shipping_texts:
+                    for amount in re.findall(r'R\$\s*([0-9][0-9.]*,[0-9]{2})',str(text)):
+                        try:shipping_prices.append(round(float(amount.replace('.','').replace(',','.')),2))
+                        except ValueError:pass
+                if free and shipping_prices:shipping_status,shipping_cost='revisao_frete_contraditorio',None
+                elif free:shipping_status,shipping_cost='frete_gratis_observado',0.0
+                elif len(set(shipping_prices))==1:shipping_status,shipping_cost='frete_pago_observado',shipping_prices[0]
+                else:shipping_status,shipping_cost='frete_nao_confirmado',None
                 with self.lock:
+                    self.items[u]['frete_status']=shipping_status
+                    self.items[u]['frete_observado']=shipping_cost
+                    self.items[u]['frete_texto']=shipping_joined[:300]
                     self.items[u]['preco_observado']=price_value
                     self.items[u]['moeda_observada']='BRL' if price_value is not None else None
                     self.items[u]['preco_status']='observado_na_pagina_nao_confirmado' if price_value is not None else 'revisao_preco_ambiguo_ou_ausente'
@@ -503,7 +532,7 @@ class App:
 
     def send(self):
         with self.lock:
-            produtos=[{'url':u,'categoria':x.get('categoria',''),'titulo':x.get('titulo',''),'imagens':list(x.get('imagens') or [])[:12],'preco_observado':x.get('preco_observado'),'moeda_observada':x.get('moeda_observada'),'preco_status':x.get('preco_status','nao_verificado')} for u,x in self.items.items()]
+            produtos=[{'url':u,'categoria':x.get('categoria',''),'titulo':x.get('titulo',''),'imagens':list(x.get('imagens') or [])[:12],'preco_observado':x.get('preco_observado'),'moeda_observada':x.get('moeda_observada'),'preco_status':x.get('preco_status','nao_verificado'),'frete_status':x.get('frete_status','nao_verificado'),'frete_observado':x.get('frete_observado')} for u,x in self.items.items()]
         urls=[x['url'] for x in produtos]
         if not urls:messagebox.showwarning('Sem URLs','Colete produtos primeiro.');return
         base=self.render.get().strip().rstrip('/');p=urlparse(base)

@@ -17,6 +17,9 @@ module.exports = (pool) => {
   r.get('/candidatos', async (req,res,next) => {
     try {
       const result = await pool.query(`SELECT u.id,u.url,u.nome,u.fornecedor,u.status,u.imagem,u.preco,u.estoque,u.dados_extraidos,
+        (SELECT p.preco_custo FROM importacao_precos p WHERE p.importacao_url_id=u.id AND p.preco_custo IS NOT NULL ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS preco_custo_observado,
+        (SELECT p.frete_status FROM importacao_precos p WHERE p.importacao_url_id=u.id ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS frete_status_observado,
+        (SELECT p.valor_frete FROM importacao_precos p WHERE p.importacao_url_id=u.id AND p.valor_frete IS NOT NULL ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS frete_valor_observado,
         COALESCE((SELECT jsonb_agg(i.url_imagem ORDER BY i.ordem) FROM importacao_imagens i WHERE i.importacao_url_id=u.id),'[]'::jsonb) AS imagens
         FROM importacao_urls u WHERE u.status IN ('revisao','pronto') ORDER BY u.atualizado_em DESC LIMIT 100`);
       res.set('Cache-Control','no-store');res.json({itens:result.rows});
@@ -60,6 +63,8 @@ module.exports = (pool) => {
       const novaLista = [...lista.filter(p=>String(p.id)!==produtoId),produto];
       await client.query(`UPDATE config SET valor=$1::jsonb WHERE chave='produtos'`,[JSON.stringify(novaLista)]);
       await client.query(`UPDATE importacao_urls SET dados_extraidos=COALESCE(dados_extraidos,'{}'::jsonb)||$2::jsonb WHERE id=$1`,[id,JSON.stringify({preco_custo_confirmado:custo,moeda:'BRL',margem_markup:margem,preco_venda:preco,preco_confirmado:true,frete_revisado:true,confirmacao_manual_em:new Date().toISOString()})]);
+      await client.query(`INSERT INTO importacao_precos(importacao_url_id,preco_custo,moeda,preco_status,frete_status,preco_venda,margem_aplicada,origem,capturado_em)
+        VALUES($1,$2,'BRL','confirmado_manualmente','frete_confirmado_manualmente',$3,$4,'aprovacao_manual',NOW())`,[id,custo,preco,margem]);
       await client.query(`UPDATE importacao_urls SET status='pronto',nome=$2,preco=$3,estoque=$4,imagem=$5,atualizado_em=NOW() WHERE id=$1`,[id,nome,preco,estoque,imagens[0]]);
       await client.query('COMMIT');
       res.json({ok:true,produtoId,mensagem:'Produto publicado manualmente no catálogo da vitrine.'});
