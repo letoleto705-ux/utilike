@@ -3,7 +3,7 @@
 const {Router} = require('express');
 const {getRate,getSaved} = require('./cambio-awesome');
 const {calc,getConfig:getPricing} = require('./precificacao-central');
-const {traduzir,categoriaPt} = require('./traducao-cj');
+const {traduzirLote,categoriaPt} = require('./traducao-cj');
 const SCHEDULE_KEY='cj_automacao_v2';
 const DEFAULT_SCHEDULE={ativo:false,intervaloHoras:24,palavra:'',categorias:[],quantidade:10,pagina:1,proximaExecucao:null,ultimaExecucao:null};
 const HOURS=[2,3,4,5,6,7,8,10,12,18,20,24];
@@ -168,16 +168,25 @@ function createCJ(pool){
       }
       if(!products.length)throw Error('CJ não retornou produtos nessa busca. Verifique a palavra-chave e a resposta da API.');
       const cfg=await getPricing(pool); // Mesmas regras da Precificação Central, lidas uma vez por execução.
+       // Traduzir nomes e descrições em um único lote antes de publicar.
+       // listV2 pode não retornar descrições; nesses casos, manter campo anterior.
+       const rawDescriptions=products.map(p=>String(p.descriptionEn||p.productDescriptionEn||p.description||'').trim().slice(0,10000));
+       const texts=products.flatMap((p,i)=>[String(p.nameEn||p.productNameEn||'').trim().slice(0,250),rawDescriptions[i]]);
+       const translations=await traduzirLote(pool,texts);
+       last.traduzidos=translations.filter(t=>t.traduzido).length;
+       last.traducaoPendente=translations.filter((t,i)=>texts[i]&&!t.traduzido).length;
+       let productIndex=0;
       for(const p of products){
        try{
-        const item=normalize(p);if(!item.id)continue;
+        const translationIndex=productIndex++;
+         const item=normalize(p);if(!item.id)continue;
         item.categoria=categoriaPt(p.oneCategoryName||p.twoCategoryName||p.threeCategoryName||item.categoria);
         let traduzido={texto:item.nome,traduzido:false};
         try{traduzido=await traduzir(pool,item.nome)}catch(e){last.avisoTraducao='Tradução indisponível: '+e.message.slice(0,100)}
         const custoBrl=item.custoUsd===null?null:roundUp(item.custoUsd*cambio);
         const precoBrl=custoBrl===null?null:calc(custoBrl,cfg);
         const valid=!!item.nome&&!!item.imagem&&precoBrl!==null;
-        const existingVariant=await pool.query("SELECT status,preco_usd,preco_brl,cambio_usd_brl,imagem,dados->>'varianteSelecionada' AS vid FROM cj_produtos WHERE id_externo=$1",[item.id]);
+        const existingVariant=await pool.query("SELECT status,preco_usd,preco_brl,cambio_usd_brl,imagem,nome,dados->>'varianteSelecionada' AS vid, dados->>'traducaoPendente' AS traducao_pendente, dados->>'descricaoOriginalEn' AS descricao_original_en, dados->>'descricaoPt' AS descricao_pt FROM cj_produtos WHERE id_externo=$1",[item.id]);
         const anterior=existingVariant.rows[0]||null;
         const pinned=!!anterior?.vid;
         // Não sobrescrever produtos desativados nem variantes escolhidas manualmente.
@@ -188,7 +197,7 @@ function createCJ(pool){
         const precoIgual=anterior&&precoBrl!==null&&Number(anterior.preco_brl)===Number(precoBrl);
         const custoIgual=anterior&&Number(anterior.preco_usd)===Number(item.custoUsd);
         const imagemIgual=anterior&&String(anterior.imagem||'')===String(item.imagem||'');
-        if(anterior&&precoIgual&&custoIgual&&imagemIgual&&anterior.status===(valid?'publicado':'revisao')){
+        if(anterior&&precoIgual&&custoIgual&&imagemIgual&&String(anterior.nome||'')===traduzido.texto&&String(anterior.traducao_pendente)===( (!traduzido.traduzido||(!!descricaoOriginal&&!descricaoTraduzida.traduzido))?'true':'false')&&(!descricaoOriginal||(String(anterior.descricao_original_en||'')===descricaoOriginal&&String(anterior.descricao_pt||'')===(descricaoTraduzida.traduzido?descricaoTraduzida.texto:'')))&&anterior.status===(valid?'publicado':'revisao')){
           last.semAlteracao++;last.importados++;continue;
         }
         const mudouPreco=!!anterior&&!precoIgual;
@@ -200,14 +209,14 @@ function createCJ(pool){
           await db.query(`INSERT INTO cj_produtos(id_externo,sku,nome,categoria,imagem,preco_usd,cambio_usd_brl,preco_brl,status,motivo,dados,atualizado_em)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,NOW())
             ON CONFLICT(id_externo) DO UPDATE SET sku=EXCLUDED.sku,nome=EXCLUDED.nome,categoria=EXCLUDED.categoria,imagem=EXCLUDED.imagem,preco_usd=EXCLUDED.preco_usd,cambio_usd_brl=EXCLUDED.cambio_usd_brl,preco_brl=EXCLUDED.preco_brl,status=CASE WHEN cj_produtos.status='desativado' THEN 'desativado' WHEN cj_produtos.dados ? 'varianteSelecionada' THEN cj_produtos.status ELSE EXCLUDED.status END,motivo=EXCLUDED.motivo,dados=EXCLUDED.dados || (cj_produtos.dados - 'varianteSelecionada') || CASE WHEN cj_produtos.dados ? 'varianteSelecionada' THEN jsonb_build_object('varianteSelecionada',cj_produtos.dados->'varianteSelecionada') ELSE '{}'::jsonb END,atualizado_em=NOW()`,
-            [item.id,item.sku,traduzido.texto,item.categoria,item.imagem,item.custoUsd,cambio,precoBrl,valid?'publicado':'revisao',reason,JSON.stringify({...item.raw,nomeOriginalEn:item.nome,traducaoPendente:!traduzido.traduzido})]);
+            [item.id,item.sku,traduzido.texto,item.categoria,item.imagem,item.custoUsd,cambio,precoBrl,valid?'publicado':'revisao',reason,JSON.stringify({...item.raw,nomeOriginalEn:item.nome,descricaoOriginalEn:descricaoOriginal||undefined,descricaoPt:descricaoOriginal?(descricaoTraduzida.traduzido?descricaoTraduzida.texto:undefined):undefined,traducaoPendente:!traduzido.traduzido||(!!descricaoOriginal&&!descricaoTraduzida.traduzido)})]);
           const status=await db.query('SELECT status FROM cj_produtos WHERE id_externo=$1',[item.id]);
           if(valid&&!pinned&&status.rows[0].status!=='desativado'){
            await db.query("INSERT INTO config(chave,valor) VALUES('produtos','[]'::jsonb) ON CONFLICT(chave) DO NOTHING");
            const catalog=await db.query("SELECT valor FROM config WHERE chave='produtos' FOR UPDATE");
            const list=catalog.rows[0].valor;if(!Array.isArray(list))throw Error('Catálogo inválido');
            const id='cj-'+item.id;const prev=list.find(x=>String(x.id)===id);
-           const product={...(prev||{}),id,nome:traduzido.texto,nomeOriginalEn:item.nome,traducaoPendente:!traduzido.traduzido,categoria:item.categoria,imagem:item.imagem,imagens:[item.imagem],precoPor:precoBrl,custoFornecedor:custoBrl,moedaFornecedor:'USD',precoOriginalUSD:item.custoUsd,cambioAplicado:cambio,freteEstimado:Number(cfg.frete),margemMarkup:Number(cfg.margem),reservaSeguranca:Number(cfg.reserva),fornecedor:'CJ Dropshipping',cjProductId:item.id,sku:item.sku,estoque:prev?.estoque??null,freteCJ:null,prazoCJ:null,freteCJStatus:'nao_cotado',ativo:true};
+           const product={...(prev||{}),id,nome:traduzido.texto,nomeOriginalEn:item.nome,...(descricaoOriginal?{descricao:descricaoTraduzida.texto,descricaoOriginalEn:descricaoOriginal}:{}),traducaoPendente:!traduzido.traduzido||(!!descricaoOriginal&&!descricaoTraduzida.traduzido),categoria:item.categoria,imagem:item.imagem,imagens:[item.imagem,...(Array.isArray(prev?.imagens)?prev.imagens:[])].filter((v,i,a)=>v&&a.indexOf(v)===i),precoPor:precoBrl,custoFornecedor:custoBrl,moedaFornecedor:'USD',precoOriginalUSD:item.custoUsd,cambioAplicado:cambio,freteEstimado:Number(cfg.frete),margemMarkup:Number(cfg.margem),reservaSeguranca:Number(cfg.reserva),fornecedor:'CJ Dropshipping',cjProductId:item.id,sku:item.sku,estoque:prev?.estoque??null,freteCJ:prev?.freteCJ??null,prazoCJ:prev?.prazoCJ??null,freteCJStatus:prev?.freteCJStatus||'nao_cotado',ativo:true};
            await db.query("UPDATE config SET valor=$1::jsonb WHERE chave='produtos'",[JSON.stringify([...list.filter(x=>String(x.id)!==id),product])]);
            last.publicados++;
            if(mudouPreco)last.precosAlterados++;
