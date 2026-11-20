@@ -1543,6 +1543,9 @@ app.use('/api/admin/publicacao', auth, soAdmin, require('./aprovacao-manual-rout
 // Publicação e atualização automáticas, com configuração persistente no Neon.
 app.use('/api/admin/automacao', auth, soAdmin, require('./automacao-cronjob')(pool));
 
+// Integração oficial CJ Dropshipping (isolada da Garimpagem AliExpress).
+app.use('/api/admin/cj', auth, soAdmin, require('./cj-dropshipping-routes')(pool));
+
 // Canal separado para a Garimpagem local: chave de serviço, nunca JWT de cliente.
 // A chave fica somente nas variáveis do Render e no computador do operador.
 const { timingSafeEqual } = require('crypto');
