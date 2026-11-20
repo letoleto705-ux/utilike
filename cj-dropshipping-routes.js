@@ -1,6 +1,7 @@
 'use strict';
 // Integração CJ isolada: não altera o fluxo AliExpress.
 const {Router} = require('express');
+const {getRate,getSaved} = require('./cambio-awesome');
 const BASE='https://developers.cjdropshipping.com/api2.0/v1';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const httpsUrl=x=>{try{const u=new URL(String(x));return u.protocol==='https:'?u.href:null}catch{return null}};
@@ -43,7 +44,8 @@ function createCJ(pool){
    const x=await pool.query("SELECT to_regclass('public.cj_produtos') AS tabela");
    if(!x.rows[0].tabela)throw Error('Execute primeiro o arquivo SQL 005_cj_dropshipping.sql no Neon.');
  }
- r.get('/status',async(req,res)=>{res.set('Cache-Control','no-store');res.json({configurada:!!process.env.CJ_API_KEY,cambioConfigurado:!!process.env.CJ_USD_BRL,executando:busy,...last})});
+ r.get('/status',async(req,res,next)=>{try{const cache=await getSaved(pool);res.set('Cache-Control','no-store');res.json({configurada:!!process.env.CJ_API_KEY,cambioConfigurado:!!process.env.AWESOME_API_KEY||!!process.env.CJ_USD_BRL,awesomeConfigurada:!!process.env.AWESOME_API_KEY,cambioCache:cache?{taxa:Number(cache.taxa),consultadoEm:cache.consultadoEm}:null,executando:busy,...last})}catch(e){next(e)}});
+ r.post('/cambio/atualizar',async(req,res,next)=>{try{const cambio=await getRate(pool,{force:true});res.set('Cache-Control','no-store');res.json({ok:true,cambio})}catch(e){next(e)}});
  r.get('/produtos',async(req,res,next)=>{try{await ensureTable();const x=await pool.query('SELECT id_externo,nome,sku,preco_usd,preco_brl,imagem,status,motivo,atualizado_em FROM cj_produtos ORDER BY atualizado_em DESC LIMIT 100');res.json({itens:x.rows})}catch(e){next(e)}});
  r.post('/importar',async(req,res)=>{
    if(busy)return res.status(409).json({erro:'Importação CJ já em execução.'});
@@ -53,9 +55,10 @@ function createCJ(pool){
    const palavra=String(b.palavra||'').trim().slice(0,100);
    if(!palavra)return res.status(400).json({erro:'Informe uma palavra-chave para buscar produtos específicos.'});
    if(!process.env.CJ_API_KEY)return res.status(400).json({erro:'Configure CJ_API_KEY no Render.'});
-   const cambio=Number(process.env.CJ_USD_BRL);
-   if(!Number.isFinite(cambio)||cambio<=0||cambio>100)return res.status(400).json({erro:'Configure CJ_USD_BRL com uma cotação USD/BRL válida no Render.'});
-   busy=true;last={executando:true,mensagem:'Consultando CJ...',importados:0,publicados:0,revisao:0,erros:0};
+   let cambioInfo;
+   try { cambioInfo=await getRate(pool); }catch(e){return res.status(503).json({erro:e.message});}
+   const cambio=cambioInfo.taxa;
+   busy=true;last={executando:true,mensagem:'Consultando CJ...',importados:0,publicados:0,revisao:0,erros:0,cambioUsado:cambio,fonteCambio:cambioInfo.fonte,avisoCambio:cambioInfo.aviso||null};
    res.status(202).json({iniciado:true,mensagem:'Importação CJ iniciada. Acompanhe em Status.'});
    setImmediate(async()=>{
     try{
