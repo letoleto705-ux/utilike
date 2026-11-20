@@ -2,9 +2,6 @@
 // Integração CJ isolada: não altera o fluxo AliExpress.
 const {Router} = require('express');
 const {getRate,getSaved} = require('./cambio-awesome');
-const SCHEDULE_KEY='cj_automacao_v2';
-const DEFAULT_SCHEDULE={ativo:false,intervaloHoras:24,palavra:'electronics',quantidade:20,pagina:1,proximaExecucao:null,ultimaExecucao:null};
-const HOURS=[2,3,4,5,6,7,8,10,12,18,20,24];
 const BASE='https://developers.cjdropshipping.com/api2.0/v1';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const httpsUrl=x=>{try{const u=new URL(String(x));return u.protocol==='https:'?u.href:null}catch{return null}};
@@ -12,9 +9,6 @@ const roundUp=n=>Math.ceil((n-1e-9)*100)/100;
 function createCJ(pool){
  const r=Router(); let token=null, expiry=0, busy=false, last={executando:false,mensagem:'Aguardando importação'};
  let lastRequest=0;
-  async function schedule(){const x=await pool.query('SELECT valor FROM config WHERE chave=$1',[SCHEDULE_KEY]);return {...DEFAULT_SCHEDULE,...(x.rows[0]?.valor||{})};}
-  async function saveSchedule(x){await pool.query('INSERT INTO config(chave,valor) VALUES($1,$2::jsonb) ON CONFLICT(chave) DO UPDATE SET valor=EXCLUDED.valor',[SCHEDULE_KEY,JSON.stringify(x)]);}
-  function validateSchedule(x){if(typeof x.ativo!=='boolean'||!HOURS.includes(x.intervaloHoras)||!Number.isInteger(x.quantidade)||x.quantidade<1||x.quantidade>30||!Number.isInteger(x.pagina)||x.pagina<1||x.pagina>1000||!x.palavra||x.palavra.length>100)throw Error('Configuração CJ inválida.');}
  async function call(path,{method='GET',body,authorized=true}={}){
    const wait=Math.max(0,1100-(Date.now()-lastRequest));if(wait)await sleep(wait);lastRequest=Date.now();
    const headers={Accept:'application/json'};
@@ -53,18 +47,19 @@ function createCJ(pool){
  r.get('/status',async(req,res,next)=>{try{const cache=await getSaved(pool);res.set('Cache-Control','no-store');res.json({configurada:!!process.env.CJ_API_KEY,cambioConfigurado:!!process.env.AWESOME_API_KEY||!!process.env.CJ_USD_BRL,awesomeConfigurada:!!process.env.AWESOME_API_KEY,cambioCache:cache?{taxa:Number(cache.taxa),consultadoEm:cache.consultadoEm}:null,executando:busy,...last})}catch(e){next(e)}});
  r.post('/cambio/atualizar',async(req,res,next)=>{try{const cambio=await getRate(pool,{force:true});res.set('Cache-Control','no-store');res.json({ok:true,cambio})}catch(e){next(e)}});
  r.get('/produtos',async(req,res,next)=>{try{await ensureTable();const x=await pool.query('SELECT id_externo,nome,sku,preco_usd,preco_brl,imagem,status,motivo,atualizado_em FROM cj_produtos ORDER BY atualizado_em DESC LIMIT 100');res.json({itens:x.rows})}catch(e){next(e)}});
- async function startImport(b,source='manual'){
-   if(busy)return {iniciado:false,motivo:'Importação CJ já em execução.'};
+ r.post('/importar',async(req,res)=>{
+   if(busy)return res.status(409).json({erro:'Importação CJ já em execução.'});
+   const b=req.body||{};
    const quantidade=Number(b.quantidade||10),pagina=Number(b.pagina||1);
-   if(!Number.isInteger(quantidade)||quantidade<1||quantidade>30||!Number.isInteger(pagina)||pagina<1||pagina>1000)throw Error('Quantidade 1–30 e página 1–1000.');
+   if(!Number.isInteger(quantidade)||quantidade<1||quantidade>30||!Number.isInteger(pagina)||pagina<1||pagina>1000)return res.status(400).json({erro:'Quantidade 1–30 e página 1–1000.'});
    const palavra=String(b.palavra||'').trim().slice(0,100);
-   if(!palavra)throw Error('Informe uma palavra-chave para buscar produtos específicos.');
-   if(!process.env.CJ_API_KEY)throw Error('Configure CJ_API_KEY no Render.');
+   if(!palavra)return res.status(400).json({erro:'Informe uma palavra-chave para buscar produtos específicos.'});
+   if(!process.env.CJ_API_KEY)return res.status(400).json({erro:'Configure CJ_API_KEY no Render.'});
    let cambioInfo;
-   cambioInfo=await getRate(pool,{force:source==='agendado'});
+   try { cambioInfo=await getRate(pool); }catch(e){return res.status(503).json({erro:e.message});}
    const cambio=cambioInfo.taxa;
    busy=true;last={executando:true,mensagem:'Consultando CJ...',importados:0,publicados:0,revisao:0,erros:0,cambioUsado:cambio,fonteCambio:cambioInfo.fonte,avisoCambio:cambioInfo.aviso||null};
-   const started={iniciado:true,mensagem:'Importação CJ iniciada. Acompanhe em Status.'};
+   res.status(202).json({iniciado:true,mensagem:'Importação CJ iniciada. Acompanhe em Status.'});
    setImmediate(async()=>{
     try{
       await ensureTable();
@@ -106,17 +101,9 @@ function createCJ(pool){
       }
       last.mensagem=`Concluído: ${last.importados} importados, ${last.publicados} publicados, ${last.revisao} em revisão, ${last.erros} erros.`;
     }catch(e){last.erros++;last.mensagem='Falha CJ: '+String(e.message).slice(0,240)}
-    finally{busy=false;last.executando=false;last.finalizadoEm=new Date().toISOString();
-      if(source==='agendado'){try{const c=await schedule();await saveSchedule({...c,ultimaExecucao:last.finalizadoEm});}catch(e){console.error('CJ agendamento:',e.message)}}}
+    finally{busy=false;last.executando=false;last.finalizadoEm=new Date().toISOString()}
    });
-   return started;
-  }
-  r.post('/importar',async(req,res)=>{try{const x=await startImport(req.body||{});res.status(x.iniciado?202:409).json(x)}catch(e){res.status(400).json({erro:e.message})}});
-  r.get('/automacao/config',async(req,res,next)=>{try{res.set('Cache-Control','no-store').json(await schedule())}catch(e){next(e)}});
-  r.put('/automacao/config',async(req,res,next)=>{try{const old=await schedule(),b=req.body||{};const cfg={...old,ativo:b.ativo,intervaloHoras:Number(b.intervaloHoras),palavra:String(b.palavra||'').trim(),quantidade:Number(b.quantidade),pagina:Number(b.pagina)};validateSchedule(cfg);cfg.proximaExecucao=cfg.ativo?new Date(Date.now()+cfg.intervaloHoras*3600000).toISOString():null;await saveSchedule(cfg);res.json({ok:true,...cfg})}catch(e){res.status(400).json({erro:e.message})}});
-  r.post('/automacao/executar-agora',async(req,res)=>{try{const cfg=await schedule();const x=await startImport(cfg,'manual');res.status(x.iniciado?202:409).json(x)}catch(e){res.status(400).json({erro:e.message})}});
-  // Agendamento persistido no Neon, com reserva atômica do próximo horário.
-  const timer=setInterval(async()=>{try{const cfg=await schedule();if(!cfg.ativo||busy||!cfg.proximaExecucao||Date.parse(cfg.proximaExecucao)>Date.now())return;const next=new Date(Date.now()+cfg.intervaloHoras*3600000).toISOString();const claimed=await pool.query(`UPDATE config SET valor=jsonb_set(valor,'{proximaExecucao}',to_jsonb($2::text),true) WHERE chave=$1 AND (valor->>'ativo')::boolean=true AND (valor->>'proximaExecucao')::timestamptz<=NOW() RETURNING chave`,[SCHEDULE_KEY,next]);if(claimed.rowCount){try{await startImport(cfg,'agendado')}catch(e){console.error('CJ automático:',e.message)}}}catch(e){console.error('CJ scheduler:',e.message)}},60000);timer.unref?.();
+ });
  return r;
 }
 module.exports=createCJ;
