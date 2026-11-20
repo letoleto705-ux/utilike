@@ -137,7 +137,7 @@ function createCJ(pool){
    let cambioInfo;
    cambioInfo=await getRate(pool,{force:source==='agendado'});
    const cambio=cambioInfo.taxa;
-   busy=true;last={executando:true,mensagem:'Consultando CJ...',importados:0,publicados:0,revisao:0,erros:0,cambioUsado:cambio,fonteCambio:cambioInfo.fonte,avisoCambio:cambioInfo.aviso||null};
+   busy=true;last={executando:true,mensagem:'Consultando CJ...',importados:0,publicados:0,revisao:0,erros:0,semAlteracao:0,precosAlterados:0,novos:0,desativadosIgnorados:0,variantesPreservadas:0,cambioUsado:cambio,fonteCambio:cambioInfo.fonte,avisoCambio:cambioInfo.aviso||null};
    const started={iniciado:true,mensagem:'Importação CJ iniciada. Acompanhe em Status.'};
    setImmediate(async()=>{
     try{
@@ -167,9 +167,7 @@ function createCJ(pool){
        }catch(e){last.erros++;last.categorias.push({id:job.categoryId||'busca',recebidos,erro:e.message.slice(0,140)})}
       }
       if(!products.length)throw Error('CJ não retornou produtos nessa busca. Verifique a palavra-chave e a resposta da API.');
-      const config=await pool.query("SELECT valor FROM config WHERE chave='cronjob_automacao_v1'");
-      const cfg={margem:30,frete:20,reserva:0,...(config.rows[0]?.valor||{})};
-      if(![cfg.margem,cfg.frete,cfg.reserva].every(x=>Number.isFinite(Number(x))&&Number(x)>=0)||Number(cfg.margem)+Number(cfg.reserva)>=100)throw Error('Markup do Cronjob inválido.');
+      const cfg=await getPricing(pool); // Mesmas regras da Precificação Central, lidas uma vez por execução.
       for(const p of products){
        try{
         const item=normalize(p);if(!item.id)continue;
@@ -177,10 +175,24 @@ function createCJ(pool){
         let traduzido={texto:item.nome,traduzido:false};
         try{traduzido=await traduzir(pool,item.nome)}catch(e){last.avisoTraducao='Tradução indisponível: '+e.message.slice(0,100)}
         const custoBrl=item.custoUsd===null?null:roundUp(item.custoUsd*cambio);
-        const precoBrl=custoBrl===null?null:calc(custoBrl,await getPricing(pool));
+        const precoBrl=custoBrl===null?null:calc(custoBrl,cfg);
         const valid=!!item.nome&&!!item.imagem&&precoBrl!==null;
-        const existingVariant=await pool.query("SELECT dados->>'varianteSelecionada' AS vid FROM cj_produtos WHERE id_externo=$1",[item.id]);
-        const pinned=!!existingVariant.rows[0]?.vid;
+        const existingVariant=await pool.query("SELECT status,preco_usd,preco_brl,cambio_usd_brl,imagem,dados->>'varianteSelecionada' AS vid FROM cj_produtos WHERE id_externo=$1",[item.id]);
+        const anterior=existingVariant.rows[0]||null;
+        const pinned=!!anterior?.vid;
+        // Não sobrescrever produtos desativados nem variantes escolhidas manualmente.
+        if(anterior?.status==='desativado'){last.desativadosIgnorados++;last.importados++;continue;}
+        if(pinned){last.variantesPreservadas++;last.importados++;continue;}
+        // Não gravar nem reordenar a vitrine se o preço calculado e a imagem continuam iguais.
+        // O câmbio entra no preço calculado; pequenas oscilações que não alterem centavos são ignoradas.
+        const precoIgual=anterior&&precoBrl!==null&&Number(anterior.preco_brl)===Number(precoBrl);
+        const custoIgual=anterior&&Number(anterior.preco_usd)===Number(item.custoUsd);
+        const imagemIgual=anterior&&String(anterior.imagem||'')===String(item.imagem||'');
+        if(anterior&&precoIgual&&custoIgual&&imagemIgual&&anterior.status===(valid?'publicado':'revisao')){
+          last.semAlteracao++;last.importados++;continue;
+        }
+        const mudouPreco=!!anterior&&!precoIgual;
+        const produtoNovo=!anterior;
         const reason=valid?null:!item.nome?'Título ausente':!item.imagem?'Imagem ausente':'Preço em USD inválido ou faixa de variantes';
         const db=await pool.connect();
         try{
@@ -198,12 +210,14 @@ function createCJ(pool){
            const product={...(prev||{}),id,nome:traduzido.texto,nomeOriginalEn:item.nome,traducaoPendente:!traduzido.traduzido,categoria:item.categoria,imagem:item.imagem,imagens:[item.imagem],precoPor:precoBrl,custoFornecedor:custoBrl,moedaFornecedor:'USD',precoOriginalUSD:item.custoUsd,cambioAplicado:cambio,freteEstimado:Number(cfg.frete),margemMarkup:Number(cfg.margem),reservaSeguranca:Number(cfg.reserva),fornecedor:'CJ Dropshipping',cjProductId:item.id,sku:item.sku,estoque:prev?.estoque??null,freteCJ:null,prazoCJ:null,freteCJStatus:'nao_cotado',ativo:true};
            await db.query("UPDATE config SET valor=$1::jsonb WHERE chave='produtos'",[JSON.stringify([...list.filter(x=>String(x.id)!==id),product])]);
            last.publicados++;
+           if(mudouPreco)last.precosAlterados++;
+           if(produtoNovo)last.novos++;
           }else if(!pinned)last.revisao++;
           await db.query('COMMIT');last.importados++;
          }catch(e){await db.query('ROLLBACK').catch(()=>{});last.erros++;last.mensagem=String(e.message).slice(0,180)}finally{db.release()}
        }catch(e){last.erros++;last.mensagem=String(e.message).slice(0,180)}
       }
-      last.mensagem=`Concluído: ${last.importados} importados, ${last.publicados} publicados, ${last.revisao} em revisão, ${last.erros} erros.`;
+      last.mensagem=`Concluído: ${last.importados} consultados/processados; ${last.novos} novos, ${last.precosAlterados} preços alterados, ${last.semAlteracao} sem alteração, ${last.variantesPreservadas} variantes preservadas, ${last.desativadosIgnorados} desativados ignorados, ${last.revisao} em revisão, ${last.erros} erros.`;
     }catch(e){last.erros++;last.mensagem='Falha CJ: '+String(e.message).slice(0,240)}
     finally{busy=false;last.executando=false;last.finalizadoEm=new Date().toISOString();
       if(source==='agendado'){try{const c=await schedule();await saveSchedule({...c,ultimaExecucao:last.finalizadoEm});}catch(e){console.error('CJ agendamento:',e.message)}}}
