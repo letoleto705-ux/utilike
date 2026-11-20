@@ -35,7 +35,6 @@ module.exports = pool => {
   async function alterarSituacao(req,res,next,acao){
     const id=Number(req.params.id);
     if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({erro:'ID inválido.'});
-    if(acao==='excluir' && req.body?.confirmacao!=='EXCLUIR')return res.status(400).json({erro:'Digite EXCLUIR para confirmar.'});
     const db=await pool.connect();
     try{
       await db.query('BEGIN');
@@ -48,7 +47,7 @@ module.exports = pool => {
       if(!found.rows.length){await db.query('ROLLBACK');return res.status(404).json({erro:'URL não encontrada. Atualize a fila.'})}
       const record=found.rows[0];
       const data=record.dados_extraidos && typeof record.dados_extraidos==='object' && !Array.isArray(record.dados_extraidos)?record.dados_extraidos:{};
-      const linked=p=>String(p.importacaoUrlId??'')===String(id) || String(p.id)==='garimpagem-'+id;
+      const linked=p=>String(p.importacaoUrlId??'')===String(id) || String(p.id)==='garimpagem-'+id || (typeof p.urlFornecedor==='string' && p.urlFornecedor===record.url);
       const published=catalog.filter(linked);
       const clean=catalog.filter(p=>!linked(p));
       if(acao==='excluir'){
@@ -56,7 +55,7 @@ module.exports = pool => {
         const order=await db.query("SELECT to_regclass('public.pedidos') AS tabela");
         if(order.rows[0].tabela){
           const existing=await db.query("SELECT 1 FROM pedidos WHERE produto_id=ANY($1::text[]) LIMIT 1",[[...new Set(['garimpagem-'+id,...published.map(p=>String(p.id))])]]);
-          if(existing.rowCount){await db.query('ROLLBACK');return res.status(409).json({erro:'Há pedidos vinculados a este produto. A exclusão definitiva foi bloqueada para preservar o histórico.'})}
+          if(existing.rowCount){await db.query('ROLLBACK');return res.status(409).json({erro:'Há pedidos vinculados a este produto. Use Desativar para retirá-lo da vitrine sem apagar o histórico de vendas.'})}
         }
         await db.query("UPDATE config SET valor=$1::jsonb WHERE chave='produtos'",[JSON.stringify(clean)]);
         // Tabelas auxiliares: exclusão explícita para compatibilidade com esquemas antigos.

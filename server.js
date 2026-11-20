@@ -1299,13 +1299,35 @@ async function confirmarPedido(id, paymentIdRecebido) {
 }
 
 // ----- Produtos, Configurações e Exclusões -----
+// O catálogo publicado fica em config.produtos (JSONB), separado de importacao_urls.
+// Se a URL foi removida diretamente no Neon, não exibir anúncios órfãos na vitrine.
+// Não altera nem apaga produtos legados que não vieram da Garimpagem.
+async function lerCatalogoSincronizado() {
+  const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
+  if (!Array.isArray(produtos)) return produtos;
+  const ids = [...new Set(produtos.map(p => {
+    if (p?.importacaoUrlId != null) return Number(p.importacaoUrlId);
+    const match = /^garimpagem-(\d+)$/.exec(String(p?.id ?? ''));
+    return match ? Number(match[1]) : null;
+  }).filter(id => Number.isSafeInteger(id) && id > 0))];
+  if (!ids.length) return produtos;
+  const existentes = await q('SELECT id, dados_extraidos FROM importacao_urls WHERE id = ANY($1::bigint[])', [ids]);
+  const ativos = new Set(existentes.rows.filter(r => r.dados_extraidos?.desativado_vitrine !== true).map(r => String(r.id)));
+  return produtos.filter(p => {
+    const match = /^garimpagem-(\d+)$/.exec(String(p?.id ?? ''));
+    const id = p?.importacaoUrlId != null ? Number(p.importacaoUrlId) : match ? Number(match[1]) : null;
+    return id == null || !Number.isSafeInteger(id) || ativos.has(String(id));
+  });
+}
+
 app.get('/api/produtos', wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json(await lerConfig('produtos', PRODUTOS_INICIAIS));
+  res.json(await lerCatalogoSincronizado());
 }));
 
 app.get('/api/admin/produtos', auth, soAdmin, wrap(async (req, res) => {
-  res.json(await lerConfig('produtos', PRODUTOS_INICIAIS));
+  res.set('Cache-Control', 'no-store');
+  res.json(await lerCatalogoSincronizado());
 }));
 
 app.put('/api/produtos', auth, soAdmin, wrap(async (req, res) => {
