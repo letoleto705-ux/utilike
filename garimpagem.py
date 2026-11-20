@@ -69,6 +69,13 @@ def canonical(url):
         pass
     return None
 
+def video_url(url):
+    try:
+        p=urlparse(url)
+        h=(p.hostname or '').lower()
+        return p.scheme=='https' and not p.username and not p.password and (h=='alicdn.com' or h.endswith('.alicdn.com') or h=='aliexpress-media.com' or h.endswith('.aliexpress-media.com')) and len(url)<2048
+    except Exception: return False
+
 def image_url(url):
     try:
         p=urlparse(url)
@@ -126,7 +133,7 @@ class App:
             except (tk.TclError, AttributeError):
                 pass
         root.bind_all('<MouseWheel>',page_wheel,add='+')
-        ttk.Label(shell,text='Garimpagem V8 (preços observados) — AliExpress',font=('Segoe UI',16,'bold')).pack(anchor='w')
+        ttk.Label(shell,text='Garimpagem V8 — painel de captura (links, imagens, vídeos e preços)',font=('Segoe UI',16,'bold')).pack(anchor='w')
         ttk.Label(shell,text='Quantidade significa URLs por categoria. Imagens são URLs separadas das URLs dos produtos.').pack(anchor='w',pady=4)
         bar=ttk.Frame(shell);bar.pack(fill='x',pady=5)
         ttk.Label(bar,text='Página inicial:').pack(side='left')
@@ -155,15 +162,31 @@ class App:
         self.cat_expanded=False
         opts=ttk.Frame(shell);opts.pack(fill='x',pady=2)
         ttk.Checkbutton(opts,text='Somente links de produtos (obrigatório)',variable=self.only_products,state='disabled').pack(side='left')
+        # Painel visual: a coleta e a captura continuam usando as rotinas originais.
         controls=ttk.Frame(shell);controls.pack(fill='x',pady=6)
-        for label,cmd in [('Iniciar coleta por categoria',self.collect),('Parar',self.request_stop),('Salvar TXT/CSV',self.save),('Carregar progresso',self.load),('Capturar imagens dos produtos',self.capture_images),('Verificar preços',self.verify_prices)]:
-            ttk.Button(controls,text=label,command=cmd).pack(side='left',padx=(0,5))
+        tk.Button(controls,text='INICIAR COLETA',command=self.collect,bg='#16803d',fg='white',activebackground='#11652f',activeforeground='white',font=('Segoe UI',9,'bold'),padx=10,pady=7,relief='flat').pack(side='left',padx=(0,6))
+        tk.Button(controls,text='PARAR COLETA',command=self.request_stop,bg='#c62828',fg='white',activebackground='#9d2020',activeforeground='white',font=('Segoe UI',9,'bold'),padx=10,pady=7,relief='flat').pack(side='left',padx=(0,6))
+        ttk.Button(controls,text='Carregar progresso',command=self.load).pack(side='left',padx=(0,6))
+        ttk.Button(controls,text='Salvar TXT/CSV',command=self.save).pack(side='left')
+        metrics=ttk.Frame(shell);metrics.pack(fill='x',pady=(4,6))
+        self.metric_values={}
+        for i,(key,title) in enumerate([('links','LINKS DOS PRODUTOS'),('imagens','IMAGENS'),('videos','VÍDEOS'),('precos','PREÇOS VERIFICADOS')]):
+            tile=ttk.LabelFrame(metrics,text=title,padding=(10,6))
+            tile.grid(row=0,column=i,sticky='nsew',padx=4)
+            self.metric_values[key]=ttk.Label(tile,text='0',font=('Segoe UI',17,'bold'))
+            self.metric_values[key].pack(anchor='center')
+            metrics.columnconfigure(i,weight=1)
+        capturebar=ttk.Frame(shell);capturebar.pack(fill='x',pady=4)
+        ttk.Button(capturebar,text='Capturar imagens',command=self.capture_images).pack(side='left',padx=(0,6))
+        ttk.Button(capturebar,text='Capturar vídeos',command=self.capture_images).pack(side='left',padx=(0,6))
+        ttk.Button(capturebar,text='Verificar preços',command=self.verify_prices).pack(side='left')
+        ttk.Label(shell,text='Imagens e vídeos são identificados juntos pela rotina de galeria existente. Os números mostram capturas reais, não metas.',foreground='#52627a').pack(anchor='w',pady=(0,4))
         imgbar=ttk.Frame(shell);imgbar.pack(fill='x',pady=2)
         ttk.Label(imgbar,text='Produtos por execução (0 = todos):').pack(side='left')
         ttk.Entry(imgbar,textvariable=self.image_products,width=12).pack(side='left',padx=4)
         ttk.Label(imgbar,text='Máx. imagens por produto:').pack(side='left')
         ttk.Entry(imgbar,textvariable=self.image_limit,width=8).pack(side='left',padx=6)
-        ttk.Label(imgbar,text='Somente galeria identificada.').pack(side='left',padx=6)
+        ttk.Label(imgbar,text='Vídeos: até 4 URLs por produto (limite atual).').pack(side='left',padx=6)
         ttk.Label(shell,textvariable=self.status,font=('Segoe UI',10,'bold')).pack(anchor='w',pady=5)
         self.grid=ttk.Treeview(shell,columns=('categoria','qtd','meta','estado'),show='headings',height=7)
         for k,title,width in [('categoria','Categoria',300),('qtd','URLs únicas',100),('meta','Meta',100),('estado','Situação',350)]:
@@ -333,6 +356,11 @@ class App:
             with self.lock:
                 counts={name:sum(1 for x in self.items.values() if x['categoria']==name) for name in selected}
                 total=len(self.items)
+                image_count=sum(len(x.get('imagens') or []) for x in self.items.values())
+                video_count=sum(len(x.get('videos') or []) for x in self.items.values())
+                price_count=sum(1 for x in self.items.values() if x.get('preco_observado') is not None and x.get('preco_status') not in ('nao_verificado','nao_encontrado','erro'))
+            for key,value in [('links',total),('imagens',image_count),('videos',video_count),('precos',price_count)]:
+                self.metric_values[key].configure(text=f'{value:,}'.replace(',','.'))
             for name in selected:
                 n=counts[name];self.grid.insert('', 'end',values=(name,n,target,'Meta atingida' if target and n>=target else 'Aguardando / incompleta'))
             self.status.set(f'{total} URLs únicas coletadas | {len(selected)} categorias | meta planejada: {len(selected)*target} (pode haver duplicatas entre categorias)')
@@ -347,7 +375,7 @@ class App:
                 if count>=limit:break
                 u=canonical(raw)
                 if not u or u in self.items:continue
-                self.items[u]={'categoria':cat,'imagens':[],'titulo':'','captura_imagens':'nao_verificado','preco_observado':None,'moeda_observada':None,'preco_status':'nao_verificado'}
+                self.items[u]={'categoria':cat,'imagens':[],'titulo':'','captura_imagens':'nao_verificado','preco_observado':None,'moeda_observada':None,'preco_status':'nao_verificado','videos':[],'video_status':'nao_verificado','descricao':''}
                 count+=1;new+=1
         return new,count
 
@@ -396,8 +424,8 @@ class App:
         atomic_text(txt,'\n'.join(x['url'] for x in data)+'\n')
         import io
         buffer=io.StringIO(newline='')
-        w=csv.writer(buffer,delimiter=';');w.writerow(['fornecedor','categoria','url_produto','titulo','url_imagem_principal','total_imagens','status_imagens','preco_observado','moeda','status_preco','frete_status','frete_observado','origem_envio','disponibilidade_status','estoque_observado','preco_tipo','preco_fonte','preco_verificado_em','preco_variante','preco_anterior_observado'])
-        for x in data:w.writerow(['AliExpress',x['categoria'],x['url'],x['titulo'],(x['imagens'] or [''])[0],len(x['imagens']),x['captura_imagens'],x.get('preco_observado') or '',x.get('moeda_observada') or '',x.get('preco_status','nao_verificado'),x.get('frete_status','nao_verificado'),x.get('frete_observado') if x.get('frete_observado') is not None else '',x.get('origem_envio') or '',x.get('disponibilidade_status') or 'nao_confirmado',x.get('estoque_observado') if x.get('estoque_observado') is not None else '',x.get('preco_tipo') or '',x.get('preco_fonte') or '',x.get('preco_verificado_em') or '',x.get('preco_variante') or '',x.get('preco_anterior_observado') if x.get('preco_anterior_observado') is not None else ''])
+        w=csv.writer(buffer,delimiter=';');w.writerow(['fornecedor','categoria','url_produto','titulo','url_imagem_principal','total_imagens','status_imagens','preco_observado','moeda','status_preco','frete_status','frete_observado','origem_envio','disponibilidade_status','estoque_observado','preco_tipo','preco_fonte','preco_verificado_em','preco_variante','preco_anterior_observado','videos','video_status','descricao'])
+        for x in data:w.writerow(['AliExpress',x['categoria'],x['url'],x['titulo'],(x['imagens'] or [''])[0],len(x['imagens']),x['captura_imagens'],x.get('preco_observado') or '',x.get('moeda_observada') or '',x.get('preco_status','nao_verificado'),x.get('frete_status','nao_verificado'),x.get('frete_observado') if x.get('frete_observado') is not None else '',x.get('origem_envio') or '',x.get('disponibilidade_status') or 'nao_confirmado',x.get('estoque_observado') if x.get('estoque_observado') is not None else '',x.get('preco_tipo') or '',x.get('preco_fonte') or '',x.get('preco_verificado_em') or '',x.get('preco_variante') or '',x.get('preco_anterior_observado') if x.get('preco_anterior_observado') is not None else '', ' | '.join(x.get('videos') or []), x.get('video_status') or 'nao_verificado', x.get('descricao') or ''])
         atomic_text(csvfile,buffer.getvalue(),encoding='utf-8-sig')
         buffer=io.StringIO(newline='')
         w=csv.writer(buffer,delimiter=';');w.writerow(['id_produto','url_produto','categoria','ordem','url_imagem','status_validacao'])
@@ -419,7 +447,7 @@ class App:
                 for x in data:
                     if not isinstance(x,dict):continue
                     u=canonical(x.get('url',''))
-                    if u and u not in self.items:self.items[u]={k:x.get(k) for k in ('categoria','imagens','titulo','captura_imagens','preco_observado','moeda_observada','preco_status','frete_status','frete_observado','frete_texto','origem_envio','origem_envio_texto','disponibilidade_status','estoque_observado','estoque_texto','preco_tipo','preco_fonte','preco_verificado_em','preco_variante','preco_url_observada','preco_anterior_observado')}
+                    if u and u not in self.items:self.items[u]={k:x.get(k) for k in ('categoria','imagens','titulo','captura_imagens','preco_observado','moeda_observada','preco_status','frete_status','frete_observado','frete_texto','origem_envio','origem_envio_texto','disponibilidade_status','estoque_observado','estoque_texto','preco_tipo','preco_fonte','preco_verificado_em','preco_variante','preco_url_observada','preco_anterior_observado','videos','video_status','descricao')}
             self.logmsg(f'Progresso recuperado: {len(self.items)} URLs únicas.')
         except (ValueError,OSError,TypeError) as e:
             if silent:self.logmsg('Progresso não carregado: '+str(e)[:150])
@@ -432,7 +460,7 @@ class App:
             messagebox.showwarning('Limite','Informe 0 para todos os produtos pendentes ou um número positivo; imagens por produto de 1 a 30.');return
         def task():
             driver=self.browser();self.stop.clear();done=0
-            with self.lock:urls=[u for u,x in self.items.items() if x.get('captura_imagens') != 'galeria_identificada' or not x.get('imagens')]
+            with self.lock:urls=[u for u,x in self.items.items() if x.get('captura_imagens') != 'galeria_identificada' or not x.get('imagens') or x.get('video_status')=='nao_verificado' or not x.get('video_status')]
             self.logmsg(f'Galerias pendentes: {len(urls)}; produtos a processar: {len(urls) if limit==0 else min(limit,len(urls))}. Preços/frete não obrigam repetir uma galeria já capturada.')
             selected_urls=urls if limit==0 else urls[:limit]
             for u in selected_urls:
@@ -475,6 +503,16 @@ class App:
                 }
                 const title=document.querySelector('meta[property="og:title"]')?.content||document.title||'';
                 const og=document.querySelector('meta[property="og:image"]')?.content||'';
+                const description=(document.querySelector('meta[name="description"]')?.content||document.querySelector('meta[property="og:description"]')?.content||'').trim().slice(0,2000);
+                const videos=[];
+                // Apenas fontes da galeria principal ou metadados da página do produto.
+                const videoSelectors=['[class*="gallery"] video','[class*="image-view"] video','[class*="product-image"] video','[class*="video-player"] video','[class*="product-video"] video'];
+                for(const sel of videoSelectors)for(const v of document.querySelectorAll(sel)){
+                  for(const src of [v.currentSrc,v.src,v.getAttribute('data-src'),...Array.from(v.querySelectorAll('source[src]')).map(x=>x.src)])if(src)videos.push(src);
+                }
+                for(const sel of ['meta[property="og:video"]','meta[property="og:video:url"]','meta[property="og:video:secure_url"]','meta[name="twitter:player:stream"]']){
+                  const src=document.querySelector(sel)?.content;if(src)videos.push(src);
+                }
                 // Fallback estrito para imagens do produto quando a galeria usa novos nomes de classe.
                 if(!candidates.length){
                   for(const img of document.querySelectorAll('img')){
@@ -524,7 +562,7 @@ class App:
                   const t=(el.innerText||'').replace(/\s+/g,' ').trim();
                   if(t&&t.length<130&&/(esgotado|fora de estoque|sem estoque|indisponível|em estoque|disponível|restam\s+\d+|\d+\s+disponíveis|out of stock|in stock|only \d+ left|\d+ available)/i.test(t))availabilityTexts.push(t);
                 }
-                return {title,imgs:candidates,og,priceTexts,shippingTexts:[...new Set(shippingTexts)].slice(0,8),originTexts:[...new Set(originTexts)].slice(0,5),availabilityTexts:[...new Set(availabilityTexts)].slice(0,8)};
+                return {title,imgs:candidates,og,description,videos,priceTexts,shippingTexts:[...new Set(shippingTexts)].slice(0,8),originTexts:[...new Set(originTexts)].slice(0,5),availabilityTexts:[...new Set(availabilityTexts)].slice(0,8)};
                 """)
                 found=[];seen=set()
                 for raw_url in raw.get('imgs',[]):
@@ -535,6 +573,11 @@ class App:
                 if not found and raw.get('og'):
                     link=urljoin(driver.current_url,raw['og'])
                     if image_url(link):found=[link]
+                found_videos=[]
+                for candidate in raw.get('videos',[]):
+                    link=urljoin(driver.current_url,str(candidate))
+                    if video_url(link) and link not in found_videos:found_videos.append(link)
+                    if len(found_videos)>=4:break
                 # Somente preço visível inequívoco em BRL. Preços promocionais/variantes exigem revisão.
                 price_candidates=[]
                 for label in raw.get('priceTexts',[]):
@@ -590,9 +633,12 @@ class App:
                     # O observador_precos é a única fonte para atualização de preço.
                     # A rotina de imagens não altera preço/status, evitando sobrescrever promoções ou revisões.
                     self.items[u]['imagens']=found or self.items[u].get('imagens',[])
+                    if found_videos:self.items[u]['videos']=found_videos
+                    self.items[u]['video_status']='identificado' if self.items[u].get('videos') else 'nao_encontrado'
+                    if raw.get('description'):self.items[u]['descricao']=str(raw['description'])[:2000]
                     self.items[u]['titulo']=str(raw.get('title') or self.items[u].get('titulo') or '')[:300]
                     self.items[u]['captura_imagens']='galeria_identificada' if self.items[u]['imagens'] else 'revisao_sem_galeria'
-                done+=1;self.logmsg(f'Produto {done}/{len(selected_urls)}: {len(found)} imagens; preço observado: {price_value if price_value is not None else "revisão"}; frete: {shipping_status}; origem: {origin or "não confirmada"}; estoque: {stock_quantity if stock_quantity is not None else availability} — {u}')
+                done+=1;self.logmsg(f'Produto {done}/{len(selected_urls)}: {len(found)} imagens; {len(found_videos)} vídeos; preço observado: {price_value if price_value is not None else "revisão"}; frete: {shipping_status}; origem: {origin or "não confirmada"}; estoque: {stock_quantity if stock_quantity is not None else availability} — {u}')
                 if done%5==0:self.save_files()
                 if self.stop.wait(2):break
             self.save_files()
@@ -665,7 +711,7 @@ class App:
         Reutiliza o mesmo endpoint e payload do botão manual. Não publica anúncios.
         """
         with self.lock:
-            produtos=[{'url':u,'categoria':x.get('categoria',''),'titulo':x.get('titulo',''),'imagens':list(x.get('imagens') or [])[:12],'preco_observado':x.get('preco_observado'),'moeda_observada':x.get('moeda_observada'),'preco_status':x.get('preco_status','nao_verificado'),'frete_status':x.get('frete_status','nao_verificado'),'frete_observado':x.get('frete_observado'),'origem_envio':x.get('origem_envio'),'disponibilidade_status':x.get('disponibilidade_status','nao_confirmado'),'estoque_observado':x.get('estoque_observado')} for u,x in self.items.items()]
+            produtos=[{'url':u,'categoria':x.get('categoria',''),'titulo':x.get('titulo',''),'imagens':list(x.get('imagens') or [])[:12],'preco_observado':x.get('preco_observado'),'moeda_observada':x.get('moeda_observada'),'preco_status':x.get('preco_status','nao_verificado'),'frete_status':x.get('frete_status','nao_verificado'),'frete_observado':x.get('frete_observado'),'origem_envio':x.get('origem_envio'),'disponibilidade_status':x.get('disponibilidade_status','nao_confirmado'),'estoque_observado':x.get('estoque_observado'),'videos':list(x.get('videos') or [])[:4],'descricao':str(x.get('descricao') or '')[:2000]} for u,x in self.items.items()]
         if not produtos:
             raise ValueError('Nenhuma URL coletada para enviar.')
         base=self.render.get().strip().rstrip('/')
