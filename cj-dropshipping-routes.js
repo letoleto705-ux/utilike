@@ -15,7 +15,7 @@ function createCJ(pool){
  let lastRequest=0; let categoryCache=null,categoryAt=0;
   async function schedule(){const x=await pool.query('SELECT valor FROM config WHERE chave=$1',[SCHEDULE_KEY]);return {...DEFAULT_SCHEDULE,...(x.rows[0]?.valor||{})};}
   async function saveSchedule(x){await pool.query('INSERT INTO config(chave,valor) VALUES($1,$2::jsonb) ON CONFLICT(chave) DO UPDATE SET valor=EXCLUDED.valor',[SCHEDULE_KEY,JSON.stringify(x)]);}
-  function validateSchedule(x){if(typeof x.ativo!=='boolean'||!HOURS.includes(x.intervaloHoras)||!Number.isInteger(x.quantidade)||x.quantidade<1||x.quantidade>30||!Number.isInteger(x.pagina)||x.pagina<1||x.pagina>1000||String(x.palavra||'').length>100||!Array.isArray(x.categorias)||x.categorias.length>20||(!x.categorias.length&&!String(x.palavra||'').trim()))throw Error('Configuração CJ inválida.');}
+  function validateSchedule(x){if(typeof x.ativo!=='boolean'||!HOURS.includes(x.intervaloHoras)||!Number.isInteger(x.quantidade)||x.quantidade<1||!Number.isInteger(x.pagina)||x.pagina<1||x.pagina>1000||String(x.palavra||'').length>100||!Array.isArray(x.categorias)||(!x.categorias.length&&!String(x.palavra||'').trim()))throw Error('Configuração CJ inválida.');}
  async function call(path,{method='GET',body,authorized=true}={}){
    const wait=Math.max(0,1100-(Date.now()-lastRequest));if(wait)await sleep(wait);lastRequest=Date.now();
    const headers={Accept:'application/json'};
@@ -128,9 +128,9 @@ function createCJ(pool){
  async function startImport(b,source='manual'){
    if(busy)return {iniciado:false,motivo:'Importação CJ já em execução.'};
    const quantidade=Number(b.quantidade||10),pagina=Number(b.pagina||1);
-   if(!Number.isInteger(quantidade)||quantidade<1||quantidade>30||!Number.isInteger(pagina)||pagina<1||pagina>1000)throw Error('Quantidade 1–30 e página 1–1000.');
+   if(!Number.isInteger(quantidade)||quantidade<1||!Number.isInteger(pagina)||pagina<1||pagina>1000)throw Error('Quantidade deve ser positiva e página entre 1 e 1000.');
    const palavra=String(b.palavra||'').trim().slice(0,100);
-   const categorias=Array.isArray(b.categorias)?[...new Set(b.categorias.map(String))].slice(0,20):[];
+   const categorias=Array.isArray(b.categorias)?[...new Set(b.categorias.map(String))]:[];
    if(!palavra&&!categorias.length)throw Error('Selecione categorias CJ ou informe palavra-chave em inglês.');
    if(!process.env.CJ_API_KEY)throw Error('Configure CJ_API_KEY no Render.');
    let cambioInfo;
@@ -146,14 +146,24 @@ function createCJ(pool){
       const jobs=categorias.length?categorias.map(id=>({categoryId:id})): [{keyWord:palavra}];
       const products=[];const seen=new Set();last.categorias=[];
       for(const job of jobs){
-       const params={page:String(pagina),size:String(quantidade),features:'enable_category',...job};
-       if(palavra&&categorias.length)params.keyWord=palavra;
+       // O administrador escolhe o total; a API recebe lotes pequenos e sequenciais.
+       // Nunca solicitar mais de 30 itens por chamada CJ.
+       let recebidos=0;
        try{
-        const data=await call('/product/listV2?'+new URLSearchParams(params));
-        const found=(Array.isArray(data?.content)?data.content:[]).flatMap(x=>Array.isArray(x.productList)?x.productList:[]);
-        for(const p of found){if(p.id&&!seen.has(String(p.id))){seen.add(String(p.id));products.push(p)}}
-        last.categorias.push({id:job.categoryId||'busca',recebidos:found.length});
-       }catch(e){last.erros++;last.categorias.push({id:job.categoryId||'busca',erro:e.message.slice(0,140)})}
+        for(let offset=0;offset<quantidade;){
+         const pageSize=Math.min(30,quantidade-offset);
+         // Páginas de tamanho fixo evitam repetir registros quando o lote final é menor.
+         const params={page:String(pagina+Math.floor(offset/30)),size:'30',features:'enable_category',...job};
+         if(palavra&&categorias.length)params.keyWord=palavra;
+         const data=await call('/product/listV2?'+new URLSearchParams(params));
+         const found=(Array.isArray(data?.content)?data.content:[]).flatMap(x=>Array.isArray(x.productList)?x.productList:[]);
+         for(const p of found.slice(0,pageSize)){if(p.id&&!seen.has(String(p.id))){seen.add(String(p.id));products.push(p)}}
+         recebidos+=Math.min(found.length,pageSize);
+         offset+=pageSize;
+         if(found.length<30)break;
+        }
+        last.categorias.push({id:job.categoryId||'busca',recebidos});
+       }catch(e){last.erros++;last.categorias.push({id:job.categoryId||'busca',recebidos,erro:e.message.slice(0,140)})}
       }
       if(!products.length)throw Error('CJ não retornou produtos nessa busca. Verifique a palavra-chave e a resposta da API.');
       const config=await pool.query("SELECT valor FROM config WHERE chave='cronjob_automacao_v1'");
@@ -201,7 +211,7 @@ function createCJ(pool){
   }
   r.post('/importar',async(req,res)=>{try{const x=await startImport(req.body||{});res.status(x.iniciado?202:409).json(x)}catch(e){res.status(400).json({erro:e.message})}});
   r.get('/automacao/config',async(req,res,next)=>{try{res.set('Cache-Control','no-store').json(await schedule())}catch(e){next(e)}});
-  r.put('/automacao/config',async(req,res,next)=>{try{const old=await schedule(),b=req.body||{};const cfg={...old,ativo:b.ativo,intervaloHoras:Number(b.intervaloHoras),palavra:String(b.palavra||'').trim(),categorias:Array.isArray(b.categorias)?[...new Set(b.categorias.map(String))].slice(0,20):[],quantidade:Number(b.quantidade),pagina:Number(b.pagina)};validateSchedule(cfg);cfg.proximaExecucao=cfg.ativo?new Date(Date.now()+cfg.intervaloHoras*3600000).toISOString():null;await saveSchedule(cfg);res.json({ok:true,...cfg})}catch(e){res.status(400).json({erro:e.message})}});
+  r.put('/automacao/config',async(req,res,next)=>{try{const old=await schedule(),b=req.body||{};const cfg={...old,ativo:b.ativo,intervaloHoras:Number(b.intervaloHoras),palavra:String(b.palavra||'').trim(),categorias:Array.isArray(b.categorias)?[...new Set(b.categorias.map(String))]:[],quantidade:Number(b.quantidade),pagina:Number(b.pagina)};validateSchedule(cfg);cfg.proximaExecucao=cfg.ativo?new Date(Date.now()+cfg.intervaloHoras*3600000).toISOString():null;await saveSchedule(cfg);res.json({ok:true,...cfg})}catch(e){res.status(400).json({erro:e.message})}});
   r.post('/automacao/executar-agora',async(req,res)=>{try{const cfg=await schedule();const x=await startImport(cfg,'manual');res.status(x.iniciado?202:409).json(x)}catch(e){res.status(400).json({erro:e.message})}});
   // Agendamento persistido no Neon, com reserva atômica do próximo horário.
   const timer=setInterval(async()=>{try{const cfg=await schedule();if(!cfg.ativo||busy||!cfg.proximaExecucao||Date.parse(cfg.proximaExecucao)>Date.now())return;const next=new Date(Date.now()+cfg.intervaloHoras*3600000).toISOString();const claimed=await pool.query(`UPDATE config SET valor=jsonb_set(valor,'{proximaExecucao}',to_jsonb($2::text),true) WHERE chave=$1 AND (valor->>'ativo')::boolean=true AND (valor->>'proximaExecucao')::timestamptz<=NOW() RETURNING chave`,[SCHEDULE_KEY,next]);if(claimed.rowCount){try{await startImport(cfg,'agendado')}catch(e){console.error('CJ automático:',e.message)}}}catch(e){console.error('CJ scheduler:',e.message)}},60000);timer.unref?.();
