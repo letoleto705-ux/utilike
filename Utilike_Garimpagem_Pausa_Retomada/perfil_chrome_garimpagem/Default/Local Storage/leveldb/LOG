@@ -1,5 +1,8 @@
-2026/11/20-09:25:23.253 3c8 Creating DB C:\Users\USER-2026\Desktop\uti like\Utilike_Garimpagem_Pausa_Retomada\perfil_chrome_garimpagem\Default\Local Storage\leveldb since it was missing.
-2026/11/20-09:25:23.305 3c8 Reusing MANIFEST C:\Users\USER-2026\Desktop\uti like\Utilike_Garimpagem_Pausa_Retomada\perfil_chrome_garimpagem\Default\Local Storage\leveldb/MANIFEST-000001
-2026/11/20-09:25:44.428 1980 Level-0 table #5: started
-2026/11/20-09:25:44.447 1980 Level-0 table #5: 84753 bytes OK
-2026/11/20-09:25:44.453 1980 Delete type=0 #3
+2026/11/20-09:48:43.247 258c Reusing MANIFEST C:\Users\USER-2026\Desktop\uti like\Utilike_Garimpagem_Pausa_Retomada\perfil_chrome_garimpagem\Default\Local Storage\leveldb/MANIFEST-000001
+2026/11/20-09:48:43.276 258c Recovering log #4
+2026/11/20-09:48:43.331 258c Level-0 table #7: started
+2026/11/20-09:48:43.359 258c Level-0 table #7: 86120 bytes OK
+2026/11/20-09:48:43.382 258c Delete type=0 #4
+2026/11/20-09:49:43.452 157c Level-0 table #10: started
+2026/11/20-09:49:43.479 157c Level-0 table #10: 136222 bytes OK
+2026/11/20-09:49:43.484 157c Delete type=0 #8
