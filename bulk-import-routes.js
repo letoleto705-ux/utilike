@@ -110,6 +110,10 @@ module.exports = pool => {
             const h=new URL(pic).hostname.toLowerCase();
             if (!['alicdn.com','aliexpress-media.com'].some(d=>h===d||h.endsWith('.'+d))) throw Error('Domínio de imagem não autorizado');
           }
+          const videosRaw=Array.isArray(raw.videos)?raw.videos:[raw.url_video||raw.video_url||raw.video].filter(Boolean);
+          if(videosRaw.length>5)throw Error('Máximo de 5 vídeos por produto');
+          const videos=[...new Set(videosRaw.map(validate))];
+          const descricao=typeof raw.descricao==='string'?raw.descricao.trim().slice(0,2000):'';
           const nome=typeof raw.titulo==='string'?raw.titulo.trim().slice(0,250):'';
           const categoria=typeof raw.categoria==='string'?raw.categoria.trim().slice(0,120):'';
           const fornecedorReal=fornecedor==='auto'?identify(url):fornecedor;
@@ -126,7 +130,7 @@ module.exports = pool => {
           const origemEnvio=origensPermitidas.has(raw.origem_envio)?raw.origem_envio:null;
           const disponibilidade=['disponivel','esgotado','nao_confirmado'].includes(raw.disponibilidade_status)?raw.disponibilidade_status:'nao_confirmado';
           const estoqueObservado=Number.isSafeInteger(raw.estoque_observado)&&raw.estoque_observado>0&&raw.estoque_observado<=1000000?raw.estoque_observado:null;
-          entries.push({url, fornecedor:fornecedorReal, nome, categoria, imagens, precoObservado:precoValido?Math.round(precoObs*100)/100:null,freteStatus:freteCoerente?freteStatus:'frete_nao_confirmado',freteValor:freteCoerente?freteNumerico:null,origemEnvio,disponibilidade,estoqueObservado});
+          entries.push({url, fornecedor:fornecedorReal, nome, categoria, descricao, videos, imagens, precoObservado:precoValido?Math.round(precoObs*100)/100:null,freteStatus:freteCoerente?freteStatus:'frete_nao_confirmado',freteValor:freteCoerente?freteNumerico:null,origemEnvio,disponibilidade,estoqueObservado});
         } catch(e){ return res.status(400).json({erro:`Registro ${i+1}: ${e.message}`}); }
       }
       const unique = [...new Map(entries.map(x=>[x.url,x])).values()];
@@ -142,14 +146,14 @@ module.exports = pool => {
           if(blocked.has(x.url)){bloqueadas++;continue;}
           const hasGallery=x.imagens.length>0;
           // Não apagar dados comerciais anteriores quando uma nova captura falhar.
-          const dados=JSON.stringify({...(x.nome?{nome:x.nome}:{}),...(x.categoria?{categoria:x.categoria}:{}),...(x.imagens.length?{imagens:x.imagens,imagem:x.imagens[0]}:{}),...(x.origemEnvio?{origem_envio:x.origemEnvio}:{}),...(x.disponibilidade!=='nao_confirmado'?{disponibilidade_status:x.disponibilidade}:{}),...(x.estoqueObservado!==null?{estoque_observado:x.estoqueObservado}:{}),url_origem:x.url,origem:'captura_local_selenium',preco_confirmado:false});
+          const dados=JSON.stringify({...(x.nome?{nome:x.nome}:{}),...(x.categoria?{categoria:x.categoria}:{}),...(x.descricao?{descricao:x.descricao}:{}),...(x.videos.length?{videos:x.videos,url_video:x.videos[0]}:{}),...(x.imagens.length?{imagens:x.imagens,imagem:x.imagens[0]}:{}),...(x.origemEnvio?{origem_envio:x.origemEnvio}:{}),...(x.disponibilidade!=='nao_confirmado'?{disponibilidade_status:x.disponibilidade}:{}),...(x.estoqueObservado!==null?{estoque_observado:x.estoqueObservado}:{}),url_origem:x.url,origem:'captura_local_selenium',preco_confirmado:false});
           // Mantém revisões já existentes. Nunca publica na vitrine.
           const result=await client.query(`INSERT INTO importacao_urls (url,fornecedor,status,lote_id,nome,imagem,dados_extraidos)
             VALUES ($1,$2,'pendente',$3,$4,$5,$6)
             ON CONFLICT (url) DO NOTHING RETURNING id`,[x.url,x.fornecedor,job.rows[0].id,x.nome||null,x.imagens[0]||null,dados]);
           inserted+=result.rowCount;
           if(hasGallery && result.rows[0]) await salvarGaleria(client,result.rows[0].id,x.imagens);
-          if(hasGallery || x.precoObservado!==null || x.freteValor!==null || x.origemEnvio || x.disponibilidade!=='nao_confirmado' || x.estoqueObservado!==null){
+          if(hasGallery || x.videos.length || x.descricao || x.nome || x.precoObservado!==null || x.freteValor!==null || x.origemEnvio || x.disponibilidade!=='nao_confirmado' || x.estoqueObservado!==null){
             if(hasGallery) comImagens++;
             if(!result.rowCount){
               const updated=await client.query(`UPDATE importacao_urls SET
@@ -181,13 +185,15 @@ module.exports = pool => {
   });
   // Dados observados localmente no Chrome: somente revisão, nunca publicação automática.
   r.post('/captura-local',async(req,res,next)=>{try{
-    const {url,nome,descricao,imagens,categoria,observacoes}=req.body||{};
+    const {url,nome,descricao,imagens,categoria,observacoes,videos,url_video,video_url}=req.body||{};
     const clean=validate(url);
     if(!/^(pt\.|www\.)?aliexpress\.com$/.test(new URL(clean).hostname)||!/^\/item\/\d+\.html$/.test(new URL(clean).pathname))return res.status(400).json({erro:'Envie uma URL direta de produto AliExpress.'});
     const pics=[...new Set((Array.isArray(imagens)?imagens:[]).filter(x=>typeof x==='string'&&x.length<2048&&/^https:\/\//i.test(x)))].slice(0,12);
-    const data={nome:String(nome||'').slice(0,250),descricao:String(descricao||'').slice(0,2000),imagens:pics,imagem:pics[0]||null,categoria:String(categoria||'').slice(0,120),observacoes:String(observacoes||'').slice(0,500),url_origem:clean,origem:'captura_local_selenium',preco:null,estoque:null,frete_gratis:null,envio_brasil:null,fornecedor_brasil:null,preco_confirmado:false};
+    const videoInput=Array.isArray(videos)?videos:[url_video||video_url].filter(Boolean);
+    const videosValidos=[...new Set(videoInput.map(validate))].slice(0,5);
+    const data={videos:videosValidos,url_video:videosValidos[0]||null,nome:String(nome||'').slice(0,250),descricao:String(descricao||'').slice(0,2000),imagens:pics,imagem:pics[0]||null,categoria:String(categoria||'').slice(0,120),observacoes:String(observacoes||'').slice(0,500),url_origem:clean,origem:'captura_local_selenium',preco:null,estoque:null,frete_gratis:null,envio_brasil:null,fornecedor_brasil:null,preco_confirmado:false};
     if(!data.nome||!pics.length)return res.status(400).json({erro:'Capture ao menos título e uma imagem antes de enviar.'});
-    const r0=await pool.query(`INSERT INTO importacao_urls(url,fornecedor,status,nome,imagem,dados_extraidos,atualizado_em) VALUES ($1,'AliExpress','revisao',$2,$3,$4,NOW()) ON CONFLICT(url) DO UPDATE SET nome=EXCLUDED.nome,imagem=EXCLUDED.imagem,dados_extraidos=EXCLUDED.dados_extraidos,status='revisao',erro=NULL,atualizado_em=NOW() RETURNING id,status`,[clean,data.nome,data.imagem,JSON.stringify(data)]);
+    const r0=await pool.query(`INSERT INTO importacao_urls(url,fornecedor,status,nome,imagem,dados_extraidos,atualizado_em) VALUES ($1,'AliExpress','revisao',$2,$3,$4,NOW()) ON CONFLICT(url) DO UPDATE SET nome=EXCLUDED.nome,imagem=EXCLUDED.imagem,dados_extraidos=COALESCE(importacao_urls.dados_extraidos,'{}'::jsonb)||EXCLUDED.dados_extraidos,status='revisao',erro=NULL,atualizado_em=NOW() RETURNING id,status`,[clean,data.nome,data.imagem,JSON.stringify(data)]);
     await salvarGaleria(pool,r0.rows[0].id,pics);
     res.json({ok:true,id:r0.rows[0].id,status:'revisao',mensagem:'Captura recebida no Neon. Preço, estoque, origem e frete aguardam verificação.'});
   }catch(e){next(e)}});
@@ -211,6 +217,8 @@ module.exports = pool => {
        u.dados_extraidos->>'disponibilidade_status' AS disponibilidade_status,
        u.dados_extraidos->>'estoque_observado' AS estoque_observado,
        u.dados_extraidos->>'automacao_assinatura' AS automacao_assinatura,
+       u.dados_extraidos->>'url_video' AS url_video,
+       u.dados_extraidos->'videos' AS videos,
        COALESCE((SELECT jsonb_agg(jsonb_build_object('url',i.url_imagem,'ordem',i.ordem) ORDER BY i.ordem) FROM importacao_imagens i WHERE i.importacao_url_id=u.id),'[]'::jsonb) AS imagens
        FROM importacao_urls u ORDER BY u.criado_em DESC LIMIT $1 OFFSET $2`,[tamanho,(pagina-1)*tamanho]);
      res.set('Cache-Control','no-store').json({resumo:stats.rows,itens:rows.rows,limite:100,pagina,total,paginas:Math.max(1,Math.ceil(total/tamanho)),precosDisponiveis:hasPrices});

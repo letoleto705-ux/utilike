@@ -1,0 +1,13 @@
+UTI LIKE - GARIMPAGEM AUTOMATIZADA / PAUSA E RETOMADA
+
+1. Faça backup da sua pasta atual, incluindo dados_garimpagem.
+2. Copie os dois arquivos desta pasta para a pasta da Garimpagem, substituindo apenas os arquivos de mesmo nome.
+3. MANTENHA os demais arquivos existentes, especialmente observador_precos.py, dados_garimpagem e suas dependencias.
+4. Inicie normalmente pelo INICIAR_GARIMPAGEM_AUTOMATIZADA.bat.
+5. Ao surgir verificacao humana, a captura deve pausar; resolva no Chrome e clique CONTINUAR CAPTURA.
+6. Se a verificacao persistir, a captura permanece pausada. PARAR COLETA encerra a operacao e preserva os dados.
+7. O envio automatico ao Neon continua condicionado a opcao ja existente.
+
+LIMITACAO: Detecao baseada em elementos/textos de bloqueio visiveis. Alteracoes do AliExpress podem exigir ajustes futuros. Nao resolve captchas automaticamente.
+
+VALIDACAO: codigo Python compilado com sucesso. Nao foi possivel realizar teste ponta a ponta no AliExpress/Chrome Windows neste ambiente.

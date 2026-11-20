@@ -48,6 +48,7 @@ function createAutomation(pool) {
           if(data.desativado_vitrine===true || data.bloqueado_automacao===true){state.ignorados++;continue;}
           const images=(Array.isArray(row.imagens)?row.imagens:[]).filter(x=>typeof x==='string'&&/^https:\/\//.test(x)).slice(0,12);
           if(!images.length && typeof row.imagem==='string' && /^https:\/\//.test(row.imagem))images.push(row.imagem);
+          const videos=[...new Set((Array.isArray(data.videos)?data.videos:[data.url_video].filter(Boolean)).filter(x=>typeof x==='string'&&/^https:\/\//i.test(x)))].slice(0,5);
           const cost=number(data.preco_observado);
           const priceOk=data.preco_status==='observado_na_pagina_nao_confirmado' && data.moeda_observada==='BRL' && data.preco_observado!==null && data.preco_observado!==undefined && Number.isFinite(cost)&&cost>0&&cost<=1000000;
           const name=String(row.nome||data.nome||'').trim().slice(0,250);
@@ -58,7 +59,7 @@ function createAutomation(pool) {
             state.revisao++;continue;
           }
           const sale=money((cost+cfg.frete)/(1-(cfg.margem+cfg.reserva)/100));
-          const signature=crypto.createHash('sha256').update(JSON.stringify({cost,images,name,category,margem:cfg.margem,frete:cfg.frete,reserva:cfg.reserva})).digest('hex');
+          const signature=crypto.createHash('sha256').update(JSON.stringify({cost,images,videos,descricao:data.descricao||'',name,category,margem:cfg.margem,frete:cfg.frete,reserva:cfg.reserva})).digest('hex');
           if(data.automacao_assinatura===signature && row.status==='pronto'){state.ignorados++;continue;}
           try {
             await db.query('BEGIN');
@@ -70,7 +71,7 @@ function createAutomation(pool) {
             if(!fresh.rows.length || fresh.rows[0].dados_extraidos?.desativado_vitrine===true || fresh.rows[0].dados_extraidos?.bloqueado_automacao===true){await db.query('ROLLBACK');state.ignorados++;continue;}
             const id='garimpagem-'+row.id;
             const prev=list.find(p=>String(p.id)===id || String(p.importacaoUrlId??'')===String(row.id));
-            const product={...(prev||{}),id,importacaoUrlId:Number(row.id),urlFornecedor:row.url,nome:name,categoria:category,desc:String(data.descricao||prev?.desc||'').slice(0,2000),imagem:images[0],imagens,precoPor:sale,custoFornecedor:cost,margemMarkup:cfg.margem,freteEstimado:cfg.frete,reservaSeguranca:cfg.reserva,estoque:prev?.estoque??null,ativo:true};
+            const product={...(prev||{}),id,importacaoUrlId:Number(row.id),urlFornecedor:row.url,nome:name,categoria:category,desc:String(data.descricao||prev?.desc||'').slice(0,2000),imagem:images[0],imagens,videos,urlVideo:videos[0]||null,precoPor:sale,custoFornecedor:cost,margemMarkup:cfg.margem,freteEstimado:cfg.frete,reservaSeguranca:cfg.reserva,estoque:prev?.estoque??null,ativo:true};
             // Nunca exibe rótulo de encomenda; também não inventa estoque.
             delete product.sobEncomenda;
             await db.query("UPDATE config SET valor=$1::jsonb WHERE chave='produtos'",[JSON.stringify([...list.filter(p=>String(p.id)!==id && String(p.importacaoUrlId??'')!==String(row.id)),product])]);
@@ -97,7 +98,8 @@ function createAutomation(pool) {
   // A requisição HTTP não fica aberta até terminar centenas de produtos.
   function start(trigger) {
     if(running)return {iniciado:false,motivo:'Já existe execução em andamento.'};
-    setImmediate(()=>runCycle(trigger).catch(e=>{state={...state,executando:false,erros:state.erros+1,mensagem:'Erro geral: '+String(e.message).slice(0,200),fim:new Date().toISOString()};}));
+    running=true;
+    setImmediate(()=>{running=false;runCycle(trigger).catch(e=>{state={...state,executando:false,erros:state.erros+1,mensagem:'Erro geral: '+String(e.message).slice(0,200),fim:new Date().toISOString()};})});
     return {iniciado:true,mensagem:'Execução solicitada.'};
   }
   const router=Router();
@@ -112,7 +114,10 @@ function createAutomation(pool) {
   router.get('/status',(req,res)=>{res.set('Cache-Control','no-store').json(state)});
   // Verificação periódica no servidor, independente de a aba estar aberta.
   const timer=setInterval(async()=>{
-    try{const cfg=await getConfig();if(cfg.ativo && !running && (!cfg.proximaExecucao || Date.parse(cfg.proximaExecucao)<=Date.now()))start('agendado')}
+    try{const cfg=await getConfig();if(cfg.ativo && !running && (!cfg.proximaExecucao || Date.parse(cfg.proximaExecucao)<=Date.now())){
+      const claimed=await pool.query(`UPDATE config SET valor=jsonb_set(valor,'{proximaExecucao}',to_jsonb($2::text),true) WHERE chave=$1 AND (valor->>'proximaExecucao' IS NULL OR (valor->>'proximaExecucao')::timestamptz<=NOW()) RETURNING chave`,[KEY,new Date(Date.now()+cfg.intervalo*60000).toISOString()]);
+      if(claimed.rowCount)start('agendado');
+    }}
     catch(e){console.error('Cronjob automático:',e.message)}
   },30000);
   timer.unref?.();

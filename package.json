@@ -5,7 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check bulk-import-routes.js && node --check import-worker.js && node --check public/bulk-queue.js"
+    "check": "node --check server.js && node --check bulk-import-routes.js && node --check import-worker.js && node --check public/bulk-queue.js && node --check automacao-cronjob.js && node --check aprovacao-manual-routes.js && node --check public/bulk-import.js"
   },
   "engines": {
     "node": ">=20"
