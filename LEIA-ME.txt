@@ -1,0 +1,14 @@
+UTI LIKE — PREÇOS UNIFICADOS
+
+Arquivos atualizados na estrutura original: server.js, precificacao-central.js (novo), automacao-cronjob.js, cj-dropshipping-routes.js, public/cronjob.html e public/index.html. Outros arquivos incluídos para referência.
+
+1. FAÇA BACKUP do Neon e dos arquivos em produção.
+2. Copie os arquivos modificados nas pastas correspondentes, sem substituir os demais módulos existentes.
+3. Não execute a migration legada. As regras usam a tabela config já existente, chave cronjob_automacao_v1.
+4. Faça deploy no Render. Acesse Central Cronjob > Precificação central.
+5. Salve regras e execute Recalcular catálogo. Confira os preços e custos em uma amostra antes de atualizar o catálogo inteiro.
+6. Recalcular não consulta preços novos na CJ ou AliExpress; usa o custo salvo. Para custos atualizados execute a importação correspondente.
+7. O preço de CJ selecionado por variante usa o custo confirmado da variante.
+8. A vitrine mobile passa a solicitar imagens sem cabeçalho Referer; isso pode ajudar com bloqueios do host, mas não corrige URLs expiradas ou servidor remoto bloqueando imagens.
+
+IMPORTANTE: Não foram fornecidos os módulos bulk-import-routes.js, import-worker.js, aprovacao-manual-routes.js e traducao-cj.js. Preserve-os no deploy.

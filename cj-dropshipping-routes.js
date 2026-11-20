@@ -2,6 +2,7 @@
 // Integração CJ isolada: não altera o fluxo AliExpress.
 const {Router} = require('express');
 const {getRate,getSaved} = require('./cambio-awesome');
+const {calc,getConfig:getPricing} = require('./precificacao-central');
 const {traduzir,categoriaPt} = require('./traducao-cj');
 const SCHEDULE_KEY='cj_automacao_v2';
 const DEFAULT_SCHEDULE={ativo:false,intervaloHoras:24,palavra:'',categorias:[],quantidade:10,pagina:1,proximaExecucao:null,ultimaExecucao:null};
@@ -84,8 +85,8 @@ function createCJ(pool){
   const cambio=(await getRate(pool)).taxa;
   const c=await pool.query("SELECT valor FROM config WHERE chave='cronjob_automacao_v1'");
   const cfg={margem:30,frete:20,reserva:0,...(c.rows[0]?.valor||{})};
-  if(![cfg.margem,cfg.frete,cfg.reserva].every(n=>Number.isFinite(Number(n))&&Number(n)>=0)||Number(cfg.margem)+Number(cfg.reserva)>=95)throw Error('Markup inválido');
-  const custo=roundUp(usd*cambio),preco=roundUp((custo+Number(cfg.frete))/(1-(Number(cfg.margem)+Number(cfg.reserva))/100));
+  if(![cfg.margem,cfg.frete,cfg.reserva].every(n=>Number.isFinite(Number(n))&&Number(n)>=0)||Number(cfg.margem)+Number(cfg.reserva)>=100)throw Error('Markup inválido');
+  const custo=roundUp(usd*cambio),preco=calc(custo,await getPricing(pool));
   const db=await pool.connect();try{await db.query('BEGIN');
    await db.query("INSERT INTO config(chave,valor) VALUES('produtos','[]'::jsonb) ON CONFLICT(chave) DO NOTHING");
    const locked=await db.query("SELECT valor FROM config WHERE chave='produtos' FOR UPDATE");
@@ -168,7 +169,7 @@ function createCJ(pool){
       if(!products.length)throw Error('CJ não retornou produtos nessa busca. Verifique a palavra-chave e a resposta da API.');
       const config=await pool.query("SELECT valor FROM config WHERE chave='cronjob_automacao_v1'");
       const cfg={margem:30,frete:20,reserva:0,...(config.rows[0]?.valor||{})};
-      if(![cfg.margem,cfg.frete,cfg.reserva].every(x=>Number.isFinite(Number(x))&&Number(x)>=0)||Number(cfg.margem)+Number(cfg.reserva)>=95)throw Error('Markup do Cronjob inválido.');
+      if(![cfg.margem,cfg.frete,cfg.reserva].every(x=>Number.isFinite(Number(x))&&Number(x)>=0)||Number(cfg.margem)+Number(cfg.reserva)>=100)throw Error('Markup do Cronjob inválido.');
       for(const p of products){
        try{
         const item=normalize(p);if(!item.id)continue;
@@ -176,7 +177,7 @@ function createCJ(pool){
         let traduzido={texto:item.nome,traduzido:false};
         try{traduzido=await traduzir(pool,item.nome)}catch(e){last.avisoTraducao='Tradução indisponível: '+e.message.slice(0,100)}
         const custoBrl=item.custoUsd===null?null:roundUp(item.custoUsd*cambio);
-        const precoBrl=custoBrl===null?null:roundUp((custoBrl+Number(cfg.frete))/(1-(Number(cfg.margem)+Number(cfg.reserva))/100));
+        const precoBrl=custoBrl===null?null:calc(custoBrl,await getPricing(pool));
         const valid=!!item.nome&&!!item.imagem&&precoBrl!==null;
         const existingVariant=await pool.query("SELECT dados->>'varianteSelecionada' AS vid FROM cj_produtos WHERE id_externo=$1",[item.id]);
         const pinned=!!existingVariant.rows[0]?.vid;

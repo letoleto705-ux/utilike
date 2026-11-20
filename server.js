@@ -1542,6 +1542,7 @@ app.use('/api/admin/importacao', auth, soAdmin, bulkImport(pool));
 app.use('/api/admin/publicacao', auth, soAdmin, require('./aprovacao-manual-routes')(pool));
 // Publicação e atualização automáticas, com configuração persistente no Neon.
 app.use('/api/admin/automacao', auth, soAdmin, require('./automacao-cronjob')(pool));
+app.use('/api/admin/precificacao', auth, soAdmin, require('./precificacao-central').createPricing(pool));
 
 // Integração oficial CJ Dropshipping (isolada da Garimpagem AliExpress).
 app.use('/api/admin/cj', auth, soAdmin, require('./cj-dropshipping-routes')(pool));

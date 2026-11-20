@@ -1,5 +1,6 @@
 'use strict';
 const { Router } = require('express');
+const {calc,getConfig: getPricing} = require('./precificacao-central');
 const crypto = require('crypto');
 const KEY = 'cronjob_automacao_v1';
 const DEFAULT = { ativo:false, intervalo:15, margem:30, frete:20, reserva:0, ultimaExecucao:null, proximaExecucao:null };
@@ -10,7 +11,7 @@ const money = n => Math.ceil((n-1e-9)*100)/100;
 function validateSettings(x) {
   if (![5,15,30].includes(x.intervalo) || typeof x.ativo !== 'boolean') throw Error('Intervalo inválido.');
   for(const k of ['margem','frete','reserva']) if (!Number.isFinite(x[k]) || x[k]<0) throw Error('Valor inválido: '+k);
-  if(x.margem>80 || x.reserva>50 || x.margem+x.reserva>=95 || x.frete>100000) throw Error('Markup fora dos limites permitidos.');
+  if(x.margem+x.reserva>=100) throw Error('A soma dos percentuais deve ser menor que 100%.');
 }
 function createAutomation(pool) {
   let running = false;
@@ -58,8 +59,9 @@ function createAutomation(pool) {
             if(row.status==='pendente' || row.status==='processando') await db.query("UPDATE importacao_urls SET status='revisao', erro=$2,atualizado_em=NOW() WHERE id=$1",[row.id,!priceOk?'Preço atual não confirmado':!images.length?'Sem imagem válida':'Sem título']);
             state.revisao++;continue;
           }
-          const sale=money((cost+cfg.frete)/(1-(cfg.margem+cfg.reserva)/100));
-          const signature=crypto.createHash('sha256').update(JSON.stringify({cost,images,videos,descricao:data.descricao||'',name,category,margem:cfg.margem,frete:cfg.frete,reserva:cfg.reserva})).digest('hex');
+          const sale=calc(cost,await getPricing(db));
+          const priceCfg=await getPricing(db);
+           const signature=crypto.createHash('sha256').update(JSON.stringify({cost,images,videos,descricao:data.descricao||'',name,category,margem:priceCfg.margem,frete:priceCfg.frete,reserva:priceCfg.reserva,taxaPagamento:priceCfg.taxaPagamento,tributos:priceCfg.tributos,reservaAfiliados:priceCfg.reservaAfiliados,despesaFixa:priceCfg.despesaFixa,protecao:priceCfg.protecao})).digest('hex');
           if(data.automacao_assinatura===signature && row.status==='pronto'){state.ignorados++;continue;}
           try {
             await db.query('BEGIN');
