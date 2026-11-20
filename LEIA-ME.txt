@@ -1,0 +1,13 @@
+UTI LIKE - CJ AUTOMÁTICO (TESTE)
+
+1. Faça backup de Neon e Git. NÃO envie .env.
+2. Copie os arquivos respeitando a estrutura. Os arquivos NÃO enviados (ex.: aprovacao-manual-routes.js, public/bulk-queue.js, public/responsive.css) devem ser preservados no projeto atual.
+3. Execute database/005_cj_dropshipping.sql no Neon somente se a tabela ainda não existir.
+4. Render Environment: CJ_API_KEY = chave CJ; AWESOME_API_KEY = chave AwesomeAPI; DATABASE_URL = conexão Neon; JWT_SECRET e ADMIN_SENHA permanecem. CJ_USD_BRL opcional, valor numérico de fallback somente se AWESOME_API_KEY não existir.
+5. Faça commit/push, aguarde deploy e entre como admin em /index.html na mesma aba. Acesse /cj-dropshipping.html.
+6. Primeiro teste com 5 produtos e automação DESLIGADA. Clique Importar e Atualizar situação. Confira Neon: SELECT id_externo,nome,status,motivo,preco_brl FROM cj_produtos ORDER BY atualizado_em DESC LIMIT 20; Confira /api/produtos e vitrine.
+7. Após validar, configure palavra-chave, quantidade (até 30), página e intervalo, e clique Salvar agendamento. Botão Atualizar produtos agora dispara uma importação independente do horário.
+8. A automação atualiza apenas produtos que a consulta CJ retornar (palavra-chave/página), NÃO todo o catálogo. Para várias categorias/páginas, é necessária expansão posterior.
+9. Serviço Render adormecido ou reiniciado pode atrasar execuções. Não é um agendador garantido; para produção, use Render Cron Job ou outro scheduler sempre ativo.
+10. Os preços são estimados; frete real, estoque, variantes e checkout devem ser validados antes de vender. A cotação AwesomeAPI é consultada a cada execução agendada; botão Consultar câmbio atualiza somente a taxa, não os preços.
+11. Arquivos legados AliExpress permanecem preservados; este pacote não executa compras na CJ.
