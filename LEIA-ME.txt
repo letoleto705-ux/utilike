@@ -1,0 +1,43 @@
+UTI LIKE — CRONJOB AUTOMÁTICO — ENTREGA PARA HOMOLOGAÇÃO
+
+ATENÇÃO: este pacote não foi executado no Render nem conectado ao Neon real. Teste em ambiente de homologação com backup do banco antes de ativar.
+
+ESTRUTURA: arquivos JS na raiz do repositório; arquivos de public/ na pasta public/. Mescle com o repositório existente; NÃO substitua o repositório inteiro.
+
+O QUE FAZ:
+- Agendamento de publicação/atualização a cada 5, 15 ou 30 minutos, inicialmente DESLIGADO.
+- Botão ATIVAR AGORA independente do agendamento.
+- Processa toda a tabela importacao_urls em lotes de 100, não só os 100 mostrados na tela.
+- Publica ou atualiza anúncios quando há título, imagem HTTPS e preço observado BRL com status reconhecido.
+- Não exige estoque e não cria rótulo 'Sob encomenda'.
+- Mantém produto anterior quando nova captura não tem preço ou imagem válidos.
+- Preço = (custo observado + frete universal)/(1 - (margem + reserva)/100).
+- Frete e reserva definidos no painel; reserva inicial 0%; frete inicial ilustrativo R$20, ajuste ANTES de ativar.
+- Exibe contadores de publicação, atualização, revisão, erros e itens analisados, e paginação da fila.
+- URLs excluídas passam a ser registradas em config.garimpagem_urls_excluidas para não reaparecer em novos lotes.
+- Galerias de imagens ficam associadas ao produto no catálogo para futura página de detalhes.
+
+LIMITAÇÕES / CUIDADOS:
+- Os preços são observados pela Garimpagem e não equivalem a cotação garantida; confira a política comercial e regras de venda.
+- NÃO automatiza compras em fornecedores, pagamentos, frete do checkout nem coleta no AliExpress.
+- A página de detalhes NÃO está neste pacote; foi deixada para a segunda etapa.
+- A página index.html está incluída SEM alterações funcionais.
+- O formulário de publicação manual conserva o markup antigo; a nova fórmula aplica-se à automação. Uma unificação futura exige testes específicos.
+- O catálogo em config.produtos é atualizado, mas pedidos já registrados não são recalculados.
+- Produtos anteriormente excluídos ANTES desta versão não possuem registro de bloqueio; revise a fila antes da primeira execução.
+- A execução agendada depende de uma instância Render ativa; instâncias suspensas não executam tarefas.
+- Logs/contadores em memória são reiniciados quando o processo Node reinicia; a configuração e a assinatura dos produtos ficam no Neon.
+- O sistema não inventa estoque, não garante disponibilidade e não altera informações do checkout.
+- Não rode migrações SQL antigas sem avaliar; este pacote usa a tabela config já existente.
+
+TESTE SUGERIDO:
+1. Faça backup do Neon e do código no Git.
+2. Publique o pacote no ambiente de homologação, com agendamento DESLIGADO.
+3. Faça login de administrador na vitrine, na mesma aba, e abra cronjob.html.
+4. Defina frete, margem, reserva; clique SALVAR CONFIGURAÇÃO.
+5. Com lote de poucos produtos, clique ATIVAR AGORA.
+6. Confira status, preços, imagens, duplicidades e a vitrine; teste também um item sem preço.
+7. Teste exclusão e nova importação da mesma URL: ela deve ficar bloqueada.
+8. Só então ative agendamento de 5/15/30 minutos e teste lote de 500 URLs.
+
+AVISO: testes estáticos de sintaxe não substituem integração real com banco e servidor.

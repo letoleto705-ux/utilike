@@ -61,6 +61,9 @@ module.exports = pool => {
         // Tabelas auxiliares: exclusão explícita para compatibilidade com esquemas antigos.
         await db.query('DELETE FROM importacao_imagens WHERE importacao_url_id=$1',[id]);
         if((await db.query("SELECT to_regclass('public.importacao_precos') AS tabela")).rows[0].tabela) await db.query('DELETE FROM importacao_precos WHERE importacao_url_id=$1',[id]);
+        // Impede que uma nova garimpagem recrie automaticamente um produto excluído.
+        await db.query("INSERT INTO config(chave,valor) VALUES('garimpagem_urls_excluidas','[]'::jsonb) ON CONFLICT(chave) DO NOTHING");
+        await db.query("UPDATE config SET valor=(SELECT COALESCE(jsonb_agg(DISTINCT value),'[]'::jsonb) FROM jsonb_array_elements_text(config.valor || to_jsonb($1::text)) AS t(value)) WHERE chave='garimpagem_urls_excluidas'",[record.url]);
         await db.query('DELETE FROM importacao_urls WHERE id=$1',[id]);
       }else if(acao==='desativar'){
         // Guarda cópia do anúncio publicado no registro da URL para futura reativação.
@@ -131,8 +134,12 @@ module.exports = pool => {
       try {
         await client.query('BEGIN');
         const job=await client.query('INSERT INTO importacao_lotes (total, criado_por) VALUES ($1,$2) RETURNING id',[unique.length,req.user.usuario]);
+        const blockedRows=await client.query("SELECT valor FROM config WHERE chave='garimpagem_urls_excluidas'");
+        const blocked=new Set(Array.isArray(blockedRows.rows[0]?.valor)?blockedRows.rows[0].valor:[]);
+        let bloqueadas=0;
         let inserted=0, atualizadas=0, comImagens=0;
         for(const x of unique){
+          if(blocked.has(x.url)){bloqueadas++;continue;}
           const hasGallery=x.imagens.length>0;
           // Não apagar dados comerciais anteriores quando uma nova captura falhar.
           const dados=JSON.stringify({...(x.nome?{nome:x.nome}:{}),...(x.categoria?{categoria:x.categoria}:{}),...(x.imagens.length?{imagens:x.imagens,imagem:x.imagens[0]}:{}),...(x.origemEnvio?{origem_envio:x.origemEnvio}:{}),...(x.disponibilidade!=='nao_confirmado'?{disponibilidade_status:x.disponibilidade}:{}),...(x.estoqueObservado!==null?{estoque_observado:x.estoqueObservado}:{}),url_origem:x.url,origem:'captura_local_selenium',preco_confirmado:false});
@@ -168,7 +175,7 @@ module.exports = pool => {
         }
         await client.query('UPDATE importacao_lotes SET inseridos=$1 WHERE id=$2',[inserted,job.rows[0].id]);
         await client.query('COMMIT');
-        res.status(201).json({ok:true,lote:job.rows[0].id,recebidas:inputList.length,unicas:unique.length,inseridas:inserted,duplicadas:unique.length-inserted,galeriasRecebidas:comImagens,registrosAtualizados:atualizadas});
+        res.status(201).json({ok:true,lote:job.rows[0].id,recebidas:inputList.length,unicas:unique.length,inseridas:inserted,duplicadas:unique.length-inserted,galeriasRecebidas:comImagens,registrosAtualizados:atualizadas,bloqueadas});
       }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
     }catch(e){next(e)}
   });
@@ -187,6 +194,9 @@ module.exports = pool => {
      r.get('/fila',async(req,res,next)=>{try{
      const hasPrices=Boolean((await pool.query("SELECT to_regclass('public.importacao_precos') AS tabela")).rows[0].tabela);
      const stats=await pool.query('SELECT status,count(*)::int AS quantidade FROM importacao_urls GROUP BY status');
+     const pagina=Math.max(1,Math.min(100000,Number.parseInt(req.query.pagina,10)||1));
+     const tamanho=100;
+     const total=Number((await pool.query('SELECT count(*)::int AS total FROM importacao_urls')).rows[0].total);
      const priceColumns=hasPrices ? `
        (SELECT p.preco_custo FROM importacao_precos p WHERE p.importacao_url_id=u.id AND p.preco_custo IS NOT NULL ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS preco_observado,
        (SELECT p.frete_status FROM importacao_precos p WHERE p.importacao_url_id=u.id ORDER BY p.capturado_em DESC,p.id DESC LIMIT 1) AS frete_status,
@@ -200,9 +210,10 @@ module.exports = pool => {
        u.dados_extraidos->>'origem_envio' AS origem_envio,
        u.dados_extraidos->>'disponibilidade_status' AS disponibilidade_status,
        u.dados_extraidos->>'estoque_observado' AS estoque_observado,
+       u.dados_extraidos->>'automacao_assinatura' AS automacao_assinatura,
        COALESCE((SELECT jsonb_agg(jsonb_build_object('url',i.url_imagem,'ordem',i.ordem) ORDER BY i.ordem) FROM importacao_imagens i WHERE i.importacao_url_id=u.id),'[]'::jsonb) AS imagens
-       FROM importacao_urls u ORDER BY u.criado_em DESC LIMIT 100`);
-     res.set('Cache-Control','no-store').json({resumo:stats.rows,itens:rows.rows,limite:100,precosDisponiveis:hasPrices});
+       FROM importacao_urls u ORDER BY u.criado_em DESC LIMIT $1 OFFSET $2`,[tamanho,(pagina-1)*tamanho]);
+     res.set('Cache-Control','no-store').json({resumo:stats.rows,itens:rows.rows,limite:100,pagina,total,paginas:Math.max(1,Math.ceil(total/tamanho)),precosDisponiveis:hasPrices});
    }catch(e){next(e)}});
 return r;
 };

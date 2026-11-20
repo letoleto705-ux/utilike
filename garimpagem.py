@@ -93,6 +93,7 @@ class App:
         self.render=tk.StringVar(value='https://utilike.onrender.com')
         self.token=tk.StringVar()
         self.remember_token=tk.BooleanVar(value=False)
+        self.auto_send=tk.BooleanVar(value=True)  # Envia após verificar preços; coleta continua manual.
         self._last_saved_token=None
         self.status=tk.StringVar(value='Aguardando coleta')
         self.images_enabled=tk.BooleanVar(value=False)
@@ -176,9 +177,10 @@ class App:
         ttk.Label(api,text='Chave exclusiva da Garimpagem:').grid(row=1,column=0,sticky='w')
         ttk.Entry(api,textvariable=self.token,show='*').grid(row=1,column=1,sticky='ew',padx=6)
         ttk.Checkbutton(api,text='Guardar chave no cofre do Windows',variable=self.remember_token,command=self.on_remember_toggle).grid(row=2,column=0,columnspan=2,sticky='w',pady=3)
-        ttk.Button(api,text='Enviar URLs ao Neon',command=self.send).grid(row=3,column=1,sticky='e',pady=4)
+        ttk.Checkbutton(api,text='Enviar automaticamente ao Neon após verificar preços',variable=self.auto_send,command=self.save_preferences).grid(row=3,column=0,columnspan=2,sticky='w',pady=3)
+        ttk.Button(api,text='Enviar URLs ao Neon (manual)',command=self.send).grid(row=4,column=1,sticky='e',pady=4)
         api.columnconfigure(1,weight=1)
-        ttk.Label(api,text='O envio cadastra URLs pendentes, não publica produtos. Não compartilhe a chave.').grid(row=4,column=0,columnspan=2,sticky='w')
+        ttk.Label(api,text='O envio cadastra/atualiza URLs na fila; não publica na vitrine. Não compartilhe a chave.').grid(row=5,column=0,columnspan=2,sticky='w')
         self.log=tk.Text(shell,height=5,wrap='word');self.log.pack(fill='both',expand=True,pady=5)
         root.protocol('WM_DELETE_WINDOW',self.close)
         self.restore_preferences()
@@ -192,6 +194,7 @@ class App:
                 base=settings.get('render')
                 if isinstance(base,str) and base.startswith('https://'):self.render.set(base)
                 self.remember_token.set(bool(settings.get('lembrar_token',False)))
+                self.auto_send.set(bool(settings.get('envio_automatico',True)))
             if self.remember_token.get():
                 try:
                     import keyring
@@ -205,7 +208,7 @@ class App:
             self.logmsg('Preferências não recuperadas: '+str(exc)[:150])
 
     def save_preferences(self):
-        atomic_text(SETTINGS,json.dumps({'render':self.render.get().strip(),'lembrar_token':self.remember_token.get()},ensure_ascii=False,indent=2))
+        atomic_text(SETTINGS,json.dumps({'render':self.render.get().strip(),'lembrar_token':self.remember_token.get(),'envio_automatico':self.auto_send.get()},ensure_ascii=False,indent=2))
 
     def on_remember_toggle(self):
         if self.remember_token.get():
@@ -646,38 +649,67 @@ class App:
                 if self.stop.wait(1.5):break
             self.save_files()
             self.logmsg(f'Verificação de preços finalizada: {ok} identificado(s), {len(urls)-ok} pendente(s) ou não processado(s). CSV atualizado.')
+            if not self.stop.is_set() and self.auto_send.get():
+                self.logmsg('Envio automático habilitado: iniciando sincronização com Render/Neon...')
+                try:
+                    self._send_to_neon()
+                except Exception as exc:
+                    self.logmsg('Envio automático não concluído: '+str(exc)[:250]+'. Dados locais preservados; use Enviar URLs ao Neon para tentar novamente.')
+            elif self.stop.is_set():
+                self.logmsg('Verificação interrompida: envio automático não iniciado.')
         self.run(task)
 
-    def send(self):
+    def _send_to_neon(self):
+        """Sincroniza a coleta atual; pode ser chamado dentro de uma tarefa em andamento.
+
+        Reutiliza o mesmo endpoint e payload do botão manual. Não publica anúncios.
+        """
         with self.lock:
             produtos=[{'url':u,'categoria':x.get('categoria',''),'titulo':x.get('titulo',''),'imagens':list(x.get('imagens') or [])[:12],'preco_observado':x.get('preco_observado'),'moeda_observada':x.get('moeda_observada'),'preco_status':x.get('preco_status','nao_verificado'),'frete_status':x.get('frete_status','nao_verificado'),'frete_observado':x.get('frete_observado'),'origem_envio':x.get('origem_envio'),'disponibilidade_status':x.get('disponibilidade_status','nao_confirmado'),'estoque_observado':x.get('estoque_observado')} for u,x in self.items.items()]
-        urls=[x['url'] for x in produtos]
-        if not urls:messagebox.showwarning('Sem URLs','Colete produtos primeiro.');return
-        base=self.render.get().strip().rstrip('/');p=urlparse(base)
+        if not produtos:
+            raise ValueError('Nenhuma URL coletada para enviar.')
+        base=self.render.get().strip().rstrip('/')
+        p=urlparse(base)
         if p.scheme!='https' or not p.hostname or p.path not in ('','/'):
-            messagebox.showwarning('Render','Informe a URL base HTTPS do Render.');return
+            raise ValueError('Informe a URL base HTTPS do Render.')
         token=self.token.get().strip()
-        if not token:messagebox.showwarning('Chave','Informe a chave GARIMPAGEM_API_KEY configurada no Render.');return
+        if not token:
+            raise ValueError('Informe a chave GARIMPAGEM_API_KEY configurada no Render.')
         self.store_token_if_opted_in(token)
         try:self.save_preferences()
         except OSError as exc:self.logmsg('Preferências não salvas: '+str(exc)[:150])
-        if not messagebox.askyesno('Enviar',f'Enviar {len(urls)} URLs e suas galerias vinculadas para o Neon?\nOs produtos NÃO serão publicados automaticamente.'):
+        total_novos=total_existentes=total_atualizados=0
+        for i in range(0,len(produtos),1000):
+            if self.stop.is_set():
+                self.logmsg('Envio interrompido. Os dados permanecem salvos localmente.')
+                return
+            payload=json.dumps({'produtos':produtos[i:i+1000],'fornecedor':'AliExpress'}).encode('utf-8')
+            req=Request(base+'/api/garimpagem/lotes',data=payload,headers={'X-Garimpagem-Key':token,'Content-Type':'application/json'},method='POST')
+            try:
+                with urlopen(req,timeout=60) as res:result=json.loads(res.read().decode('utf-8'))
+            except HTTPError as e:
+                detail=e.read(300).decode('utf-8',errors='replace')
+                if e.code==401:raise RuntimeError('HTTP 401: chave de integração inválida ou ausente no Render. Confira GARIMPAGEM_API_KEY. '+detail)
+                if e.code==403:raise RuntimeError('HTTP 403: acesso negado pela API. '+detail)
+                raise RuntimeError(f'HTTP {e.code}: {detail}')
+            except URLError as e:raise RuntimeError('Conexão: '+str(e.reason))
+            total_novos+=int(result.get('inseridas') or 0)
+            total_existentes+=int(result.get('duplicadas') or 0)
+            total_atualizados+=int(result.get('registrosAtualizados') or 0)
+            self.logmsg(f'Lote enviado: {result.get("inseridas", "?")} novas; {result.get("duplicadas", "?")} existentes; {result.get("galeriasRecebidas", "?")} galerias recebidas; {result.get("registrosAtualizados", "?")} atualizadas.')
+        self.logmsg(f'Envio concluído ao Neon: {total_novos} novas, {total_existentes} existentes, {total_atualizados} atualizadas. Confira a fila do Cronjob.')
+
+    def send(self):
+        """Botão manual preservado como alternativa ao envio automático."""
+        with self.lock:
+            count=len(self.items)
+        if not count:
+            messagebox.showwarning('Sem URLs','Colete produtos primeiro.')
             return
-        def task():
-            for i in range(0,len(urls),1000):
-                payload=json.dumps({'produtos':produtos[i:i+1000],'fornecedor':'AliExpress'}).encode('utf-8')
-                req=Request(base+'/api/garimpagem/lotes',data=payload,headers={'X-Garimpagem-Key':token,'Content-Type':'application/json'},method='POST')
-                try:
-                    with urlopen(req,timeout=60) as res:result=json.loads(res.read().decode('utf-8'))
-                except HTTPError as e:
-                    detail=e.read(300).decode('utf-8',errors='replace')
-                    if e.code==401:raise RuntimeError('HTTP 401: chave de integração inválida ou ausente no Render. Confira GARIMPAGEM_API_KEY. '+detail)
-                    if e.code==403:raise RuntimeError('HTTP 403: acesso negado pela API. '+detail)
-                    raise RuntimeError(f'HTTP {e.code}: {detail}')
-                except URLError as e:raise RuntimeError('Conexão: '+str(e.reason))
-                self.logmsg(f'Lote enviado: {result.get("inseridas", "?")} novas; {result.get("duplicadas", "?")} existentes; {result.get("galeriasRecebidas", "?")} galerias recebidas; {result.get("registrosAtualizados", "?")} atualizadas.')
-            self.logmsg('Envio de URLs concluído. Atualize cronjob.html para conferir.')
-        self.run(task)
+        if not messagebox.askyesno('Enviar',f'Enviar {count} URLs e suas galerias vinculadas para o Neon?\nEste envio atualiza a fila, sem publicar automaticamente na vitrine.'):
+            return
+        self.stop.clear()
+        self.run(self._send_to_neon)
 
     def close(self):
         if self.busy and not messagebox.askyesno('Sair','Uma operação está em andamento. Parar e sair?'):return

@@ -1540,6 +1540,8 @@ const bulkImport = require('./bulk-import-routes');
 app.use('/api/admin/importacao', auth, soAdmin, bulkImport(pool));
 // Aprovação manual: somente administrador, sem publicação automática.
 app.use('/api/admin/publicacao', auth, soAdmin, require('./aprovacao-manual-routes')(pool));
+// Publicação e atualização automáticas, com configuração persistente no Neon.
+app.use('/api/admin/automacao', auth, soAdmin, require('./automacao-cronjob')(pool));
 
 // Canal separado para a Garimpagem local: chave de serviço, nunca JWT de cliente.
 // A chave fica somente nas variáveis do Render e no computador do operador.
