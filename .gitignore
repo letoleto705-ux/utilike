@@ -3,3 +3,8 @@ dados_garimpagem
 __pycache__
 Utilike_Garimpagem_Pausa_Retomada
 capitura manual
+
+.env
+.env.*
+**/.env
+**/.env.*
