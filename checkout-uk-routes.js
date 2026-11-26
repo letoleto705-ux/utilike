@@ -3,6 +3,7 @@
    Não executa cobrança, não chama Mercado Pago, não altera afiliados nem Cronjob. */
 const {Router}=require('express');
 const {createHash}=require('node:crypto');
+const { MAX_AFFILIATE_LEVELS, resolveAffiliateChain, commissionDistribution } = require('./affiliate-chain');
 module.exports=function checkoutUk({pool,auth,lerCatalogoPublico}){
  const router=Router(),wrap=fn=>(req,res,next)=>Promise.resolve().then(()=>fn(req,res,next)).catch(next);
  const txt=(x,n=250)=>String(x??'').trim().slice(0,n);
@@ -41,6 +42,16 @@ module.exports=function checkoutUk({pool,auth,lerCatalogoPublico}){
   if(r.rows.length!==new Set(ids).size)throw Object.assign(Error('Seu carrinho mudou. Atualize a seleção.'),{status:409});
   return r.rows.map(x=>({produtoId:x.produto_id,variacaoId:x.variacao_id,quantidade:x.quantidade}));
  }
+ async function attribution(req,value){
+  if(!req.user)return {afiliado:null,origem:'loja',cadeia:[],comissoes:commissionDistribution(value,{},[])};
+  const identidade=req.user.perfil==='admin'?'admin:'+req.user.usuario:'pessoa:'+req.user.usuario;
+  const row=(await pool.query('SELECT afiliado_usuario,origem FROM checkout_uk.uk_atribuicoes WHERE identidade=$1 AND expira_em>now()',[identidade])).rows[0];
+  const afiliado=row?.afiliado_usuario&&String(row.afiliado_usuario).toLowerCase()!=='admin'?row.afiliado_usuario:null;
+  const cadeia=afiliado?await resolveAffiliateChain(afiliado,async ref=>(await pool.query('SELECT id,usuario,patrocinador_id FROM afiliados WHERE usuario=$1 OR lower(id)=$1 LIMIT 1',[String(ref).toLowerCase()])).rows[0]||null):[];
+  const cfg=Object.fromEntries((await pool.query("SELECT chave,valor FROM config WHERE chave IN ('taxaComissao','taxaPatrocinador','taxaAvo')")).rows.map(x=>[x.chave,x.valor]));
+  const taxas={taxaComissao:Number(cfg.taxaComissao??30),taxaPatrocinador:Number(cfg.taxaPatrocinador??10),taxaAvo:Number(cfg.taxaAvo??10)};
+  return {afiliado:afiliado||'admin',origem:row?.origem||'loja',cadeia:cadeia.slice(0,MAX_AFFILIATE_LEVELS),comissoes:commissionDistribution(value,taxas,cadeia)};
+ }
  async function calcular(req,b){const raw=inputList(b);const ids=Array.isArray(b?.carrinhoIds)?[...new Set(b.carrinhoIds.map(String))]:[];
   if(ids.length){if(ids.length>4000)throw Object.assign(Error('Seleção muito grande.'),{status:413});raw.push(...await getCartRows(req,ids))}
   if(!raw.length)throw Object.assign(Error('Sacola vazia. Adicione produtos antes de continuar.'),{status:400});
@@ -58,7 +69,7 @@ module.exports=function checkoutUk({pool,auth,lerCatalogoPublico}){
     disponivel:available,indisponivelMotivo:reason||'',precoUnitario:available?money(unit):null,totalItem:available?money(unit*x.quantidade):null});
   }
   const subtotal=money(itens.reduce((sum,x)=>sum+Number(x.totalItem||0),0));
-  return {itens,subtotal,desconto:0,frete:null,total:null,moeda:'BRL',pendencias:['frete','pagamento'],indisponiveis:itens.filter(x=>!x.disponivel).length};
+  return {itens,subtotal,desconto:0,frete:null,total:null,moeda:'BRL',pendencias:['frete','pagamento'],indisponiveis:itens.filter(x=>!x.disponivel).length,atribuicao:await attribution(req,subtotal)};
  }
  // Mini-vitrine de sugestões com mistura variável das categorias realmente presentes na sacola.
  router.post('/sugestoes',wrap(async(req,res)=>{
@@ -106,7 +117,7 @@ module.exports=function checkoutUk({pool,auth,lerCatalogoPublico}){
   const db=await pool.connect();try{
    await db.query('BEGIN');
    const old=await db.query('SELECT id FROM checkout_uk.pedidos WHERE chave_idempotencia=$1 AND usuario=$2 AND perfil=$3',[uuidId,req.user.usuario,req.user.perfil]);
-   if(old.rowCount){await db.query('COMMIT');return res.json({id:old.rows[0].id,status:'rascunho',teste:true,cobranca:false})}
+   if(old.rowCount){await db.query('COMMIT');return res.json({id:old.rows[0].id,status:'rascunho',teste:true,cobranca:false,atribuicao:cotacao.atribuicao})}
    await db.query(`INSERT INTO checkout_uk.compradores_dados(perfil,usuario,nome,email,telefone) VALUES($1,$2,$3,$4,$5)
     ON CONFLICT(perfil,usuario) DO UPDATE SET nome=EXCLUDED.nome,email=EXCLUDED.email,telefone=EXCLUDED.telefone,atualizado_em=now()`,[req.user.perfil,req.user.usuario,contato.nome,contato.email,contato.telefone]);
    const result=await db.query(`INSERT INTO checkout_uk.pedidos(chave_idempotencia,usuario,perfil,nome_comprador,email_comprador,telefone_comprador,endereco_entrega,subtotal,status)
@@ -118,7 +129,7 @@ module.exports=function checkoutUk({pool,auth,lerCatalogoPublico}){
    await db.query(`INSERT INTO checkout_uk.uk_pedido_atribuicoes(pedido_id,afiliado_usuario)
     SELECT $1,afiliado_usuario FROM checkout_uk.uk_atribuicoes
     WHERE identidade=$2 AND expira_em>now() ON CONFLICT DO NOTHING`,[result.rows[0].id,pessoa]);
-   await db.query('COMMIT');return res.status(201).json({id:result.rows[0].id,status:'rascunho',teste:true,cobranca:false});
+   await db.query('COMMIT');return res.status(201).json({id:result.rows[0].id,status:'rascunho',teste:true,cobranca:false,atribuicao:cotacao.atribuicao});
   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e}finally{db.release()}
  }));
  router.use((err,req,res,next)=>{if(res.headersSent)return next(err);if(err.status)return res.status(err.status).json({erro:err.message});console.error('Checkout UK:',err);return res.status(500).json({erro:'Falha interna no checkout. Confira as migrations e o servidor.'})});

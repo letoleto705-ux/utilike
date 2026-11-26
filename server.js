@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { MAX_AFFILIATE_LEVELS, resolveAffiliateChain } = require('./affiliate-chain');
 
 // ===== Variáveis de ambiente (configure no Render) =====
 const { DATABASE_URL, JWT_SECRET, ADMIN_SENHA } = process.env;
@@ -299,6 +300,7 @@ function arvoreOrdenada(lista) {
   const saida = [];
   const visitar = (af, nivel) => {
     if (visitados.has(af.usuario)) return;
+    if (nivel > MAX_AFFILIATE_LEVELS) return;
     visitados.add(af.usuario);
     saida.push({ ...af, nivel });
     lista.filter(f => ehFilhoDe(f, af)).forEach(f => visitar(f, nivel + 1));
@@ -312,6 +314,21 @@ async function usuarioDoPatrocinador(patrocinadorId, client = pool) {
   if (!patrocinadorId || norm(patrocinadorId) === 'admin') return null;
   const r = await client.query('SELECT usuario FROM afiliados WHERE lower(id) = $1 OR usuario = $1', [norm(patrocinadorId)]);
   return r.rows.length ? r.rows[0].usuario : norm(patrocinadorId);
+}
+
+async function cadeiaDoAfiliado(afiliado, client = pool) {
+  return resolveAffiliateChain(afiliado, async referencia => {
+    const r = await client.query(
+      'SELECT id, usuario, patrocinador_id FROM afiliados WHERE usuario = $1 OR lower(id) = $1 LIMIT 1',
+      [norm(referencia)]
+    );
+    return r.rows[0] || null;
+  });
+}
+
+async function profundidadeDoPatrocinador(patrocinadorId, client = pool) {
+  if (!patrocinadorId || norm(patrocinadorId) === 'admin') return 0;
+  return (await cadeiaDoAfiliado(patrocinadorId, client)).length;
 }
 
 // ===== Banco =====
@@ -563,6 +580,10 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
       if (indicador && indicador !== 'admin' && indicador !== usuario) {
         const pai = (await client.query('SELECT id, usuario FROM afiliados WHERE usuario = $1', [indicador])).rows[0];
         if (pai) {
+          if (await profundidadeDoPatrocinador(pai.id, client) >= MAX_AFFILIATE_LEVELS) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ erro: 'A rede de afiliados permite no máximo 3 níveis.' });
+          }
           patrocinadorId = pai.id;
           patrocinadorUsuario = pai.usuario;
         }
@@ -661,7 +682,13 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
       const indicador = normUsuario(refCookie||req.body.indicador);
     if (indicador && indicador !== 'admin' && indicador !== usuario) {
       const pai = (await client.query('SELECT id, usuario FROM afiliados WHERE usuario = $1', [indicador])).rows[0];
-      if (pai) { patrocinadorId = pai.id; patrocinadorUsuario = pai.usuario; }
+      if (pai) {
+        if (await profundidadeDoPatrocinador(pai.id, client) >= MAX_AFFILIATE_LEVELS) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ erro: 'A rede de afiliados permite no máximo 3 níveis.' });
+        }
+        patrocinadorId = pai.id; patrocinadorUsuario = pai.usuario;
+      }
     }
 
     const id = 'AF-' + usuario.toUpperCase();

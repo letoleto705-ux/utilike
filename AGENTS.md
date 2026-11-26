@@ -154,6 +154,28 @@ Nenhuma funcionalidade deve ser descrita como homologada sem evidência no ambie
 **Situação atual:** Implementação preparada para homologação; não considerar produção concluída.  
 **Pendências:** Validar integração com o repositório completo no VS Code, revisar e aprovar SQL 009, aplicar em ambiente apropriado, realizar testes reais de login/conta/sacola/checkout e confirmar o campo `freteEstimado` dos produtos publicados antes do deploy.
 
+### Registro - cadeia estrita de afiliados e atribuicao no checkout
+
+**Data:** 2026-11-26
+**Gatilho:** AFILIADOS e CHECKOUT
+**Solicitacao do administrador:** Auditar e implementar a cadeia de afiliados de exatamente 3 niveis, preservando a atribuicao na vitrine, sacola, carrinho e vitrines extras do checkout, sem alterar layout, SQL, commit, push ou deploy.
+**Diagnostico realizado:** O cadastro aceitava qualquer patrocinador existente sem validar a profundidade da arvore, e a arvore administrativa percorria descendentes sem teto. O checkout UK registrava somente o afiliado direto em `uk_pedido_atribuicoes`; a sessao/cookie assinado ja preservava a origem entre vitrine, sacola, carrinho e sugestoes, mas a cadeia superior nao era resolvida nem retornada para o checkout.
+**Arquivos analisados:** `AGENTS.md`, `docs/HISTORICO_DESENVOLVIMENTO.md`, `docs/ESTADO_ATUAL_PROJETO.md`, `server.js`, `uk-central-routes.js`, `checkout-uk-routes.js`, `public/vitrine-uk.js`, `public/produto-uk.js`, `public/carrinho-uk.js`, `public/sacola-uk.js`, `public/checkout-uk.js`, `database/008_checkout_uti_like.sql`, `database/010_identidade_sacola_seguranca.sql` e testes existentes.
+**Arquivos modificados:** `server.js`, `uk-central-routes.js`, `checkout-uk-routes.js` e este arquivo.
+**Arquivos criados:** `affiliate-chain.js` e `tests/afiliados-3-niveis.test.js`.
+**Arquivos excluidos:** Nenhum.
+**Alteracoes no backend:** Criada regra compartilhada com limite `MAX_AFFILIATE_LEVELS=3`, protecao contra ciclos e distribuicao direta/pai/avo. O cadastro tradicional e a conversao UK rejeitam um novo afiliado abaixo de um patrocinador de nivel 3. A arvore administrativa nao expande um quarto nivel. O checkout resolve o afiliado atribuido pela identidade autenticada, reconstroi vendedor/pai/avo, aplica as taxas configuradas e devolve a atribuicao no rascunho; o registro existente do afiliado direto foi preservado. Nenhum pagamento foi ativado.
+**Alteracoes no frontend:** Nenhuma alteracao visual ou de layout. O fluxo existente de `public/vitrine-uk.js` captura `ref`/`afiliado` em cookie assinado, e `public/checkout-uk.js`, `public/carrinho-uk.js` e `public/sacola-uk.js` continuam enviando os itens pela mesma sessao central; por isso recomendacoes adicionadas no checkout herdam a mesma atribuicao na cotacao seguinte.
+**Alteracoes no banco de dados:** Nenhuma. Nenhum SQL, migracao ou consulta ao Neon de producao foi executado.
+**Exemplo validado:** Com `a1` patrocinado por `admin`, `a2` por `a1` e `a3` por `a2`, uma venda atribuida a `a3` resolve `[a3,a2,a1]`. Em uma venda de R$ 100 com taxas 30%, 10% e 10%, registra/calcula R$ 30 para `a3`, R$ 10 para `a2`, R$ 10 para `a1` e R$ 50 para a Central. Um item recomendado adicionado no checkout permanece na mesma sacola/sessao e entra na mesma cotacao e cadeia.
+**Testes executados:** `node --test tests/afiliados-3-niveis.test.js`, `node --check` nos modulos backend e frontend envolvidos, `npm.cmd run check` e `git diff --check`.
+**Resultado dos testes:** Os dois testes da cadeia passaram; verificacoes de sintaxe e `npm.cmd run check` passaram. Nao houve homologacao autenticada contra Neon/Render nem criacao de pedido real.
+**Commit realizado:** Nao
+**Push realizado:** Nao
+**Situacao atual:** Implementacao preparada para homologacao; nao considerar producao concluida.
+**Pendencias:** Validar no Neon de homologacao a migration 010 e o fluxo de pagamento que futuramente consumira a distribuicao. O schema atual de `checkout_uk` armazena uma atribuicao direta por pedido; a comissao efetivamente liquidada continua fora do rascunho de teste e deve ser ligada ao webhook/fluxo de pedido pago quando autorizado.
+**Proxima etapa recomendada:** Testar com a cadeia admin/a1/a2/a3, acessar a vitrine com `?ref=admin&afiliado=a3`, adicionar um produto da vitrine extra no checkout e confirmar no JSON da cotacao/pedido-teste a cadeia de tres niveis, sem habilitar cobranca.
+
 ### Registro - auditoria de carrinho, referências e enquadramento
 
 **Data:** 2026-11-26

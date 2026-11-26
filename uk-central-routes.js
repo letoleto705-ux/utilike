@@ -4,6 +4,7 @@ const express=require('express');
 const crypto=require('crypto');
 const jwt=require('jsonwebtoken');
 const bcrypt=require('bcryptjs');
+const { MAX_AFFILIATE_LEVELS, resolveAffiliateChain } = require('./affiliate-chain');
 module.exports=function centralUK({pool,auth,soAdmin,jwtSecret,limitarTentativas,adminUsuario='admin'}){
  const r=express.Router(),wrap=f=>(req,res,next)=>Promise.resolve().then(()=>f(req,res,next)).catch(next);
  const text=(x,n=250)=>String(x??'').trim().slice(0,n);
@@ -74,7 +75,7 @@ const visitor=decode(req,'uk_visitante');if(visitor?.tipo==='visitante'&&visitor
    const account=(await db.query('SELECT usuario,nome,email,cpf,telefone,senha_hash FROM contas WHERE usuario=$1 FOR UPDATE',[usuario])).rows[0];
    if(!account)throw Object.assign(Error('Conta de cliente não encontrada.'),{status:404});
    let existing=(await db.query('SELECT id,patrocinador_id FROM afiliados WHERE usuario=$1',[usuario])).rows[0];
-   let sponsor='admin';if(!existing&&indicador!=='admin'&&indicador!==usuario){const pai=(await db.query('SELECT id FROM afiliados WHERE usuario=$1',[indicador])).rows[0];if(!pai)throw Object.assign(Error('Patrocinador não existe.'),{status:400});sponsor=pai.id}
+   let sponsor='admin';if(!existing&&indicador!=='admin'&&indicador!==usuario){const pai=(await db.query('SELECT id,usuario FROM afiliados WHERE usuario=$1',[indicador])).rows[0];if(!pai)throw Object.assign(Error('Patrocinador não existe.'),{status:400});const chain=await resolveAffiliateChain(pai.id,async ref=>(await db.query('SELECT id,usuario,patrocinador_id FROM afiliados WHERE usuario=$1 OR lower(id)=$1 LIMIT 1',[String(ref).toLowerCase()])).rows[0]||null);if(chain.length>=MAX_AFFILIATE_LEVELS)throw Object.assign(Error('A rede de afiliados permite no máximo 3 níveis.'),{status:400});sponsor=pai.id}
    if(!existing){const id='AF-'+usuario.toUpperCase();await db.query(`INSERT INTO afiliados(id,usuario,nome,email,cpf,pix,telefone,senha_hash,patrocinador_id)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[id,usuario,account.nome,account.email,account.cpf,pix,account.telefone,account.senha_hash,sponsor]);existing={id,patrocinador_id:sponsor}}
    else await db.query('UPDATE afiliados SET pix=$2 WHERE usuario=$1',[usuario,pix]);
