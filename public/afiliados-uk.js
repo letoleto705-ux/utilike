@@ -6,11 +6,13 @@
   if(!['afiliado','admin'].includes(u.perfil)){$('feedback').textContent='Sua conta é de cliente. Para se afiliar, acesse o cadastro.';const a=UK.el('a','','Quero me afiliar');a.href='login.html?modo=afiliado';$('feedback').append(' ',a);return}
   const username=u.perfil==='admin'?'admin':u.usuario;
   $('welcome').textContent='Olá, '+(u.nome||u.usuario)+'! Compartilhe seus links para divulgar a Uti Like.';
-  $('vendaLink').value=linkBase+'index.html?ref=admin'+(username==='admin'?'':'&afiliado='+encodeURIComponent(username));
-  $('conviteLink').value=linkBase+'login.html?modo=afiliado&cad='+encodeURIComponent(username);
+  const makeContextLink=(path,values)=>{const url=new URL(path,linkBase);for(const [key,value] of Object.entries(values)){if(value!==undefined&&value!==null&&String(value)!=='')url.searchParams.set(key,String(value))}return UK.normalizeContextUrl(url.href)};
+  $('vendaLink').value=makeContextLink('index.html',username==='admin'?{ref:'admin'}:{ref:'admin',afiliado:username});
+  $('conviteLink').value=makeContextLink('login.html',{modo:'afiliado',cad:username});
   $('adminLink').hidden=u.perfil!=='admin';$('dashboard').hidden=false;
-  document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const x=$(b.dataset.copy);if(x.value)navigator.clipboard.writeText(x.value).then(()=>{$('feedback').textContent='Link copiado.'}).catch(()=>{x.select();$('feedback').textContent='Selecione e copie o link.'})});
-  $('makeProductLink').onclick=()=>{const id=$('productId').value.trim();if(!id)return;const url=new URL('produto.html',linkBase);url.searchParams.set('id',id);url.searchParams.set('ref','admin');if(username!=='admin')url.searchParams.set('afiliado',username);$('productLink').value=url.href};
+  const copyStyle=document.createElement('style');copyStyle.textContent='.links{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.links input{flex:1 1 240px;min-width:0}.links button.copied{background:#16874e!important;border-color:#16874e!important;color:#fff!important}';document.head.append(copyStyle);
+  document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{const x=$(b.dataset.copy);if(!x?.value)return;let copied=false;try{await navigator.clipboard.writeText(x.value);copied=true}catch{try{x.select();copied=document.execCommand('copy')}catch{}}if(copied){b.dataset.originalText??=b.textContent;b.textContent='Copiado';b.classList.add('copied');$('feedback').textContent='Link copiado com sucesso.';setTimeout(()=>{b.textContent=b.dataset.originalText||'Copiar';b.classList.remove('copied')},2200)}else{$('feedback').textContent='Selecione e copie o link.'}});
+  $('makeProductLink').onclick=()=>{const id=$('productId').value.trim();if(!id)return;$('productLink').value=makeContextLink('produto.html',username==='admin'?{id,ref:'admin'}:{id,ref:'admin',afiliado:username})};
   const rede=await UK.api('/api/rede');$('feedback').textContent='Seu painel está conectado ao servidor.';
   const resumo=rede.resumo||{};
   $('sales').textContent=String(resumo.vendasPagas??rede.eu?.vendasDiretas??0);

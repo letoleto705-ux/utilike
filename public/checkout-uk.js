@@ -25,9 +25,9 @@ document.addEventListener('DOMContentLoaded',()=>{const style=document.createEle
  function referencePayload(){const t=UK.tracking();return {ref:t.get('ref')||'',afiliado:t.get('afiliado')||(t.get('ref')==='admin'?'admin':'')}}
  function renderCart(){const wrap=$('cartItems');wrap.replaceChildren();
   if(!quote?.itens?.length){showEmpty('Sua sacola está vazia. Escolha produtos na vitrine ou no Carrinho UK.');return}
-  for(const p of quote.itens){const item=node('article','product uk-checkout-item'+(p.disponivel?'':' uk-unavailable'));const photo=node('div','product-visual'),url=UK.image(p.imagem);
+  for(const p of quote.itens){const item=node('article','product uk-checkout-item'+(p.disponivel?'':' uk-unavailable'));item.addEventListener('click',e=>{if(e.target.closest('a,button,input'))return;location.href=UK.contextHref('produto.html?id='+encodeURIComponent(p.produtoId))});const photo=node('div','product-visual'),url=UK.image(p.imagem);
    if(url){const img=node('img');img.loading='lazy';img.alt=p.nome;img.referrerPolicy='no-referrer';img.src=url;photo.append(img)}else photo.append(node('span','missing','Sem foto'));
-    const content=node('div','product-main'),link=node('a','product-name',p.nome);link.href=UK.contextHref('produto.html?id='+encodeURIComponent(p.produtoId));content.append(link);if(p.descricao)content.append(node('div','product-description',p.descricao));
+    const content=node('div','product-main'),link=node('a','product-name',p.nome);link.href=UK.contextHref('produto.html?id='+encodeURIComponent(p.produtoId));content.append(link);if(p.descricao)content.append(node('div','product-description',String(p.descricao).replace(/\s+/g,' ').trim().slice(0,180)));
    if(p.variacaoId)content.append(node('div','product-attr','Variação: '+p.variacaoId));
    if(!p.disponivel)content.append(node('div','uk-item-alert',p.indisponivelMotivo||'Produto indisponível no momento.'));
    else content.append(node('div','product-footer',p.quantidade+' × '+money(p.precoUnitario)+' = '+money(p.totalItem)));
@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded',()=>{const style=document.createEle
  }
  function renderRecommend(p){const card=node('article','rec'),photo=node('div','rec-img'),url=UK.image(p.imagem);
   if(url){const img=node('img');img.src=url;img.alt=p.nome;img.referrerPolicy='no-referrer';img.loading='lazy';img.decoding='async';photo.append(img)}else photo.append(node('span','missing','Sem foto'));
-  const name=node('a','rec-name',p.nome);name.href='produto.html?id='+encodeURIComponent(p.id);
+  card.addEventListener('click',e=>{if(e.target.closest('a,button'))return;location.href=UK.contextHref('produto.html?id='+encodeURIComponent(p.id))});const name=node('a','rec-name',p.nome);name.href=UK.contextHref('produto.html?id='+encodeURIComponent(p.id));
   const price=node('span','rec-price',money(p.precoPor));const btn=node('button','rec-btn',p.temVariantes?'Escolher variação':'+ Sacola');btn.type='button';
   btn.onclick=async()=>{if(p.temVariantes){location.href='produto.html?id='+encodeURIComponent(p.id);return}
    try{await UK.adicionarSacola(p.id,'',1);btn.textContent='Adicionado ✓';toast('Produto incluído na sacola');await reload(true)}catch(e){toast(e.message,true)}

@@ -13,7 +13,7 @@
   if(!items.length){root.className='bag-empty';root.textContent='Sua sacola está vazia. Adicione produtos na vitrine ou na página de detalhes.';atualizaTotal();return}
   for(const x of items){const p=resumos.get(x.produtoId),row=UK.el('article','bag-row');const u=UK.image(p?.imagem||p?.image);
    if(u){const im=UK.el('img','bag-image');im.src=u;im.loading='lazy';im.alt=String(p?.nome||'Produto');im.referrerPolicy='no-referrer';row.append(im)}else row.append(UK.el('div','bag-image','Sem foto'));
-   const info=UK.el('div'),name=UK.el('a','bag-title',p?.nome||'Produto indisponível no catálogo atual');name.href='produto.html?id='+encodeURIComponent(x.produtoId);info.append(name);
+   const info=UK.el('div'),name=UK.el('a','bag-title',p?.nome||'Produto indisponível no catálogo atual');name.href=UK.contextHref('produto.html?id='+encodeURIComponent(x.produtoId));info.append(name);
    if(x.variacaoId)info.append(UK.el('div','bag-variant','Variação: '+x.variacaoId));
    if(p&&p.disponivel!==false)info.append(UK.el('div','bag-price',UK.money(p.precoPor??p.preco??p.price)));
    else info.append(UK.el('div','bag-status','Produto indisponível no momento; não será apagado automaticamente.'));

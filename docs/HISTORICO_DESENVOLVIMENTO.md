@@ -67,3 +67,14 @@
 - `npm run check` passou. Com `pg.Pool.query` simulado em memória e conexão real bloqueada, o servidor iniciou e `/api/produtos` e `/api/vitrine/catalogo` responderam 200; carrinho, administração e perfil do checkout UK responderam 401 sem autenticação; login vazio respondeu 401. Uma expectativa inicial incorreta de 400 para login foi corrigida para o comportamento observado e o teste passou.
 - Busca pelas páginas removidas e pelas rotas antigas de checkout e webhook no servidor e frontend não encontrou ocorrências. Não houve SQL real, cobrança ou acesso ao Neon. Os fluxos autenticados, dados reais e o deploy Render não foram homologados; falta conferir os logs do deploy.
 \n+## Registro complementar — entrega integrada 2026-11-26\n+\n+Implementação registrada em `docs/ESTADO_ATUAL_PROJETO.md`; testes focados, sintaxe e `npm.cmd run check` passaram. Nenhum SQL, pagamento, commit, push ou deploy foi executado.
+
+## Registro — ajustes integrados de interface e vitrines 2026-11-26
+
+**Gatilho:** VITRINE, CHECKOUT e AFILIADOS.
+**Solicitação:** Corrigir cabeçalho mobile/desktop, vitrine espelhada do login/carrinho/sacola, enquadramento do checkout, links de convite e cópia responsiva, sem SQL, pagamentos, commit, push ou deploy.
+**Diagnóstico:** O cartão administrativo mobile não acionava a área de opções; a identificação do usuário não tinha bloco nome/papel; login, carrinho e sacola não tinham todas as vitrines com rolagem própria; preço do carrinho ficava junto da imagem; checkout mostrava descrição extensa e só o nome era clicável; links de afiliado e botão de cópia não tinham canonização/feedback uniforme.
+**Arquivos modificados:** `public/index.html`, `public/login-uk.js`, `public/carrinho-uk.js`, `public/sacola-uk.js`, `public/checkout-uk.js`, `public/vitrine-uk.js`, `public/afiliados-uk.js`.
+**Banco/pagamentos:** Nenhum SQL foi executado; nenhum pedido real, pagamento, fornecedor, commit, push ou deploy foi executado.
+**Testes:** `node --check` nos JavaScripts alterados, validação dos scripts inline de `index.html` e `login.html`, `npm.cmd run check`, `node --test tests/entrega-integrada.test.js tests/afiliados-3-niveis.test.js` e `git diff --check`.
+**Resultado:** Verificações passaram; homologação visual/autenticada local ainda é necessária.
+**Situação:** Preparado para revisão local; não homologado em produção.
