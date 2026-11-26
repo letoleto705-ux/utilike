@@ -38,6 +38,15 @@ As migrações 001–008 estão no diretório `database/`. A migração 008 cria
 - **Homologado:** nenhum fluxo de produção foi homologado nesta limpeza.
 - **Pendente:** frete, cupons, pagamento, webhook e validação do checkout UK no Neon de teste.
 
+## Entrega de correção integrada — 2026-11-26
+
+- URL de convite/indicação canonicalizada para remover duplicatas e combinações redundantes; a URL mantém prioridade sobre o fallback `uk_indicacao` de 15 dias e `uk_sessao` continua exclusivo para autenticação.
+- Carrinho e Sacola percorrem todas as páginas do catálogo para completar a vitrine espelhada, sem limite artificial de exibição.
+- Checkout passou a receber descrição e a enquadrar o conteúdo de produto com quebra segura; Produto Teste é local, ID `produto-teste`, SKU `UTI-TESTE-100`, valor fixo de R$ 100,00.
+- Chaves locais do Produto Teste: `uk_produto_teste_v1`, `uk_produto_teste_id_v1`, `uk_produto_teste_sku_v1` e `uk_produto_teste_resultado_v1`. A autorização dos três níveis é somente local do navegador e foi protegida contra envio ao Neon.
+- Testes: `node --check` nos arquivos alterados, `npm.cmd run check`, `node --test tests/entrega-integrada.test.js` e `git diff --check` passaram. `npm test` não existe no `package.json`.
+- Nenhum SQL, pagamento, commit, push ou deploy foi executado; não houve homologação autenticada contra Neon/Render.
+
 ## Próximo gatilho
 
 CHECKOUT: validar o schema 008 em branch de teste e completar o fluxo sem cobrança real antes de qualquer integração de pagamento.

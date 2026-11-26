@@ -1,5 +1,18 @@
 # Histórico de desenvolvimento — Uti Like
 
+## Registro — correção integrada de convite, vitrines e checkout — 2026-11-26
+
+**Gatilho:** VITRINE, CHECKOUT e AFILIADOS
+**Solicitação:** Corrigir URL de convite sem duplicação, login limpo para convidados, vitrines completas no Carrinho/Sacola e enquadramento do checkout, preservando o Produto Teste local.
+**Arquivos modificados:** `public/vitrine-uk.js`, `public/login-uk.js`, `public/checkout-uk.js` e `checkout-uk-routes.js`.
+**Diagnóstico confirmado:** O contexto era apenas mesclado por `set` condicional; o login permitia autofill; o Carrinho carregava uma página de 12 produtos e a Sacola não tinha espelho; o checkout não recebia descrição estruturada.
+**Produto Teste:** ID `produto-teste`, SKU `UTI-TESTE-100`, R$ 100,00; dados locais em `uk_produto_teste_v1`, `uk_produto_teste_id_v1`, `uk_produto_teste_sku_v1` e `uk_produto_teste_resultado_v1`.
+**Banco/pagamento:** Nenhum SQL, pedido real, cobrança, fornecedor, Mercado Pago ou acesso ao Neon foi executado.
+**Testes:** `node --check`, `npm.cmd run check`, `node --test tests/entrega-integrada.test.js` e `git diff --check` passaram; `npm test` não existe no projeto.
+**Commit/Push/Deploy:** Não realizados.
+**Situação:** Implementado e testado localmente; não homologado em Neon/Render.
+**Próxima etapa:** Validar visualmente em navegador e executar o roteiro manual com contas de teste, sem habilitar cobrança.
+
 ## Fase 1 — limpeza e consolidação
 
 **Data:** 2026-11-25

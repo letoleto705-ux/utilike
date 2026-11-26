@@ -1,6 +1,8 @@
 'use strict';
 (async()=>{
- const $=id=>document.getElementById(id),query=new URLSearchParams(location.search);
+ const cleanInvite=UK.normalizeContextUrl?UK.normalizeContextUrl(location.href):location.href;if(cleanInvite!==location.href)history.replaceState(history.state,'',cleanInvite);
+ const $=id=>document.getElementById(id),query=new URLSearchParams(location.search),invite=query.has('cad')||query.get('modo')==='afiliado';
+ if(invite){const form=$('loginForm');form.reset();form.autocomplete='off';form.querySelectorAll('input').forEach(input=>{input.autocomplete='off';input.value=''})}
  let modoAfiliado=query.get('modo')==='afiliado'||!!query.get('cad'),user=null;
  const status=(id,msg,err=false)=>{const e=$(id);e.textContent=msg;e.className='status'+(err?' error':'')};
  const button=(f,run)=>{f.addEventListener('submit',async ev=>{ev.preventDefault();const b=f.querySelector('button[type=submit],button:not([type])');b.disabled=true;try{await run(Object.fromEntries(new FormData(f).entries()))}catch(e){const el=f.parentElement.querySelector('.status');if(el)status(el.id,e.message,true)}finally{b.disabled=false}})};

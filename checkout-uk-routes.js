@@ -69,6 +69,7 @@ module.exports=function checkoutUk({pool,auth,lerCatalogoPublico}){
     nome:p?txt(p.nome||p.name||'Produto Uti Like',250):'Produto não disponível',imagem:p?txt(p.imagem||p.image||'',500):'',categoria:p?txt(p.categoria||p.category||'Outros',120):'',
     disponivel:available,indisponivelMotivo:reason||'',precoUnitario:available?money(unit):null,totalItem:available?money(unit*x.quantidade):null});
   }
+  for(const item of itens){const p=map.get(item.produtoId);item.descricao=p?txt(p.descricao_ptbr||p.descricao||p.desc||'',600):''}
   const subtotal=money(itens.reduce((sum,x)=>sum+Number(x.totalItem||0),0));
   return {itens,subtotal,desconto:0,frete:null,total:null,moeda:'BRL',pendencias:['frete','pagamento'],indisponiveis:itens.filter(x=>!x.disponivel).length,atribuicao:await attribution(req,subtotal,b)};
  }
