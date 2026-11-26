@@ -31,8 +31,13 @@ module.exports=function checkoutUk({pool,auth,lerCatalogoPublico}){
  function detail(p){return {id:String(p.id),nome:txt(p.nome||p.name||'Produto Uti Like',250),imagem:txt(p.imagem||p.image||'',500),categoria:txt(p.categoria||p.category||'Outros',120),precoPor:price(p),estoque:p.estoque??null,temVariantes:Array.isArray(p.variantes)&&p.variantes.length>0}}
  async function getCartRows(req,ids){if(!req.user)throw Object.assign(Error('Entre para comprar os itens guardados no carrinho.'),{status:401});
   if(ids.some(x=>!uuid(x)))throw Object.assign(Error('Seleção do carrinho inválida.'),{status:400});
-  const r=await pool.query(`SELECT i.id,i.produto_id,i.variacao_id,i.quantidade FROM checkout_uk.carrinho_itens_guardados i JOIN checkout_uk.carrinhos_guardados c ON c.id=i.carrinho_id
-   WHERE c.usuario=$1 AND c.perfil=$2 AND i.id=ANY($3::uuid[])`,[req.user.usuario,req.user.perfil,ids]);
+  const tables=await pool.query("SELECT to_regclass('public.uk_identidades') AS identidades,to_regclass('public.uk_carrinho_itens') AS itens");
+  const canonical=tables.rows[0]?.identidades&&tables.rows[0]?.itens;
+  const r=canonical
+   ?await pool.query(`SELECT i.id,i.produto_id,i.variacao_id,i.quantidade FROM public.uk_carrinho_itens i JOIN public.uk_identidades u ON u.id=i.identidade_id
+    WHERE u.usuario=$1 AND i.id=ANY($2::uuid[])`,[req.user.usuario,ids])
+   :await pool.query(`SELECT i.id,i.produto_id,i.variacao_id,i.quantidade FROM checkout_uk.carrinho_itens_guardados i JOIN checkout_uk.carrinhos_guardados c ON c.id=i.carrinho_id
+    WHERE c.usuario=$1 AND c.perfil=$2 AND i.id=ANY($3::uuid[])`,[req.user.usuario,req.user.perfil,ids]);
   if(r.rows.length!==new Set(ids).size)throw Object.assign(Error('Seu carrinho mudou. Atualize a seleção.'),{status:409});
   return r.rows.map(x=>({produtoId:x.produto_id,variacaoId:x.variacao_id,quantidade:x.quantidade}));
  }
@@ -82,8 +87,10 @@ module.exports=function checkoutUk({pool,auth,lerCatalogoPublico}){
   const own=(await pool.query('SELECT nome,email,telefone FROM checkout_uk.compradores_dados WHERE perfil=$1 AND usuario=$2',[perfil,usuario])).rows[0];
   const base=perfil==='cliente'?(await pool.query('SELECT nome,email,telefone FROM public.contas WHERE usuario=$1',[usuario])).rows[0]:null;
   const p={usuario,perfil,nome:own?.nome||base?.nome||(perfil==='admin'?'Administrador':usuario),email:own?.email||base?.email||'',telefone:own?.telefone||base?.telefone||''};
-  const existe=await pool.query("SELECT to_regclass('public.vitrine_endereco_cliente_uk') AS tabela");
-  const end=perfil==='cliente'&&existe.rows[0]?.tabela?(await pool.query('SELECT destinatario,cep,logradouro,numero,complemento,bairro,cidade,uf FROM public.vitrine_endereco_cliente_uk WHERE usuario=$1',[usuario])).rows[0]||null:null;
+  const existe=await pool.query("SELECT to_regclass('public.vitrine_endereco_cliente_uk') AS tabela,to_regclass('public.uk_identidades') AS identidades,to_regclass('public.uk_enderecos') AS enderecos");
+  let end=null;
+  if(perfil==='cliente'&&existe.rows[0]?.tabela)end=(await pool.query('SELECT destinatario,cep,logradouro,numero,complemento,bairro,cidade,uf FROM public.vitrine_endereco_cliente_uk WHERE usuario=$1',[usuario])).rows[0]||null;
+  else if(existe.rows[0]?.identidades&&existe.rows[0]?.enderecos)end=(await pool.query('SELECT e.destinatario,e.cep,e.logradouro,e.numero,e.complemento,e.bairro,e.cidade,e.uf FROM public.uk_enderecos e JOIN public.uk_identidades i ON i.id=e.identidade_id WHERE i.usuario=$1',[usuario])).rows[0]||null;
   res.set('Cache-Control','no-store').json({perfil:p,endereco:end,modoTeste:process.env.CHECKOUT_UK_TEST_MODE==='true'});
  }));
  router.post('/pedido-teste',wrap(async(req,res)=>{

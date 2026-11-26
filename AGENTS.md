@@ -153,3 +153,24 @@ Nenhuma funcionalidade deve ser descrita como homologada sem evidência no ambie
 **Push realizado:** Não  
 **Situação atual:** Implementação preparada para homologação; não considerar produção concluída.  
 **Pendências:** Validar integração com o repositório completo no VS Code, revisar e aprovar SQL 009, aplicar em ambiente apropriado, realizar testes reais de login/conta/sacola/checkout e confirmar o campo `freteEstimado` dos produtos publicados antes do deploy.
+
+### Registro - auditoria de carrinho, referências e enquadramento
+
+**Data:** 2026-11-26
+**Gatilho:** VITRINE e CHECKOUT
+**Solicitação do administrador:** Auditar e corrigir referências `ref`/`afiliado`, erro interno de `carrinho.html`, vínculo do carrinho à sessão/perfil, favoritos, Sacola e layout responsivo, sem SQL, pagamento ou deploy.
+**Diagnóstico realizado:** As rotas do carrinho consultavam somente `checkout_uk.carrinhos_guardados`/`carrinho_itens_guardados`, embora o conjunto de identidade mais novo disponibilize `public.uk_identidades`/`public.uk_carrinho_itens`; isso causa erro 500 quando a migration 009 não está presente. A rota também convertia afiliado para cliente ao criar o carrinho, divergindo da consulta do checkout. O favorito da página de produto bloqueava qualquer perfil diferente de cliente no frontend.
+**Arquivos analisados:** `vitrine-routes.js`, `checkout-uk-routes.js`, `uk-central-routes.js`, `public/vitrine-uk.js`, `public/carrinho-uk.js`, `public/produto.html`, `public/produto-uk.js`, `public/index.html`, `public/checkout.html`, `public/checkout-uk.js`, migrations 006/009/010 e testes existentes.
+**Arquivos modificados:** `vitrine-routes.js`, `checkout-uk-routes.js`, `public/vitrine-uk.js`, `public/produto-uk.js`, `public/index.html`, `public/checkout.html`, `public/checkout-uk.js` e este arquivo.
+**Arquivos criados:** Nenhum.
+**Arquivos excluídos:** Nenhum.
+**Alterações no backend:** Seleção compatível entre tabelas de identidade e schema legado; carrinho agora é indexado pelo usuário autenticado, sem usar ID do corpo; checkout consulta o mesmo armazenamento; favoritos usam identidade para admin/afiliado quando disponível; endereço do checkout pode ser recuperado de `public.uk_enderecos`.
+**Alterações no frontend:** Captura e propagação de `ref`/`afiliado`; favoritar respeita a sessão ativa; feedback da Sacola ficou explícito; links internos preservam contexto; checkout foi reordenado para produtos, cupom, endereço e resumo, com contenção de overflow; busca/cabeçalho foram reorganizados responsivamente.
+**Alterações no banco de dados:** Nenhuma. Nenhum SQL foi executado.
+**Testes executados:** `node --check` nos módulos alterados, `npm.cmd run check`, `git diff --check` e `node --test tests/checkout-sacola.test.js`.
+**Resultado dos testes:** Sintaxe e check do projeto passaram. O teste legado `tests/checkout-sacola.test.js` permaneceu incompatível com o estado atual (8 falhas, incluindo expectativas antigas de contrato e mock incompleto); não houve acesso autenticado ao Neon/Render. A validação runtime especializada não estava disponível como ferramenta executável nesta sessão e não foi simulada.
+**Commit realizado:** Não
+**Push realizado:** Não
+**Situação atual:** Parcial, preparada para homologação local.
+**Pendências:** Confirmar no Neon de homologação qual conjunto de migrations está instalado; testar login admin/cliente/afiliado, carrinho, favoritos, referência e checkout sem criar pedido; validar visualmente em Render antes de publicar.
+**Próxima etapa recomendada:** Executar smoke test autenticado em ambiente de homologação, sem cobrança, e revisar os testes legados para o contrato atual.

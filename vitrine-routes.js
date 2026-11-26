@@ -109,14 +109,23 @@ module.exports=function criarVitrine({pool,auth,soAdmin,lerCatalogoPublico}){
  }));
  router.get('/campanhas/ativas',wrap(async(req,res)=>{const r=await q("SELECT id,nome,tipo,titulo,mensagem,imagem_url,destino,botao_texto,intervalo_horas FROM public.vitrine_campanhas WHERE ativo=true AND (inicio_em IS NULL OR inicio_em<=now()) AND (fim_em IS NULL OR fim_em>now()) ORDER BY prioridade DESC,criado_em DESC LIMIT 10");res.set('Cache-Control','no-store').json(r.rows)}));
  router.get('/conta/resumo',auth,wrap(async(req,res)=>{const id=await cliente(req);const result=await q('SELECT usuario,nome,email,telefone,criado_em FROM public.contas WHERE usuario=$1',[req.user.usuario]);const fav=await q('SELECT count(*)::int AS total FROM public.vitrine_favoritos WHERE cliente_id=$1',[id]);res.set('Cache-Control','no-store').json({perfil:result.rows[0],favoritos:fav.rows[0].total,pedidos:{disponivel:false,mensagem:'Integração do histórico de pedidos reservada ao gatilho CHECKOUT.'}})}));
- router.get('/favoritos',auth,wrap(async(req,res)=>{const id=await cliente(req);const r=await q('SELECT produto_id FROM public.vitrine_favoritos WHERE cliente_id=$1 ORDER BY criado_em DESC',[id]);const set=new Set(r.rows.map(x=>x.produto_id));res.json((await publico()).filter(p=>set.has(String(p.id))&&valido(p)))}));
- router.post('/favoritos',auth,wrap(async(req,res)=>{const id=await cliente(req),prodId=txt(req.body?.produtoId,250),p=(await publico()).find(x=>String(x.id)===prodId&&valido(x));if(!p)return res.status(404).json({erro:'Produto indisponível.'});await q('INSERT INTO public.vitrine_favoritos(cliente_id,produto_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[id,prodId]);res.status(201).json({ok:true})}));
- router.delete('/favoritos/:id',auth,wrap(async(req,res)=>{const id=await cliente(req);await q('DELETE FROM public.vitrine_favoritos WHERE cliente_id=$1 AND produto_id=$2',[id,txt(req.params.id,250)]);res.json({ok:true})}));
+ router.get('/favoritos',auth,wrap(async(req,res)=>{const tables=await q("SELECT to_regclass('public.uk_identidades') AS identidades,to_regclass('public.uk_favoritos') AS favoritos");let r;if(tables.rows[0]?.identidades&&tables.rows[0]?.favoritos){const i=await q('SELECT id FROM public.uk_identidades WHERE usuario=$1',[req.user.usuario]);r=i.rows[0]?await q('SELECT produto_id FROM public.uk_favoritos WHERE identidade_id=$1 ORDER BY criado_em DESC',[i.rows[0].id]):{rows:[]};}else{const id=await cliente(req);r=await q('SELECT produto_id FROM public.vitrine_favoritos WHERE cliente_id=$1 ORDER BY criado_em DESC',[id])}const set=new Set(r.rows.map(x=>x.produto_id));res.json((await publico()).filter(p=>set.has(String(p.id))&&valido(p)))}));
+ router.post('/favoritos',auth,wrap(async(req,res)=>{const prodId=txt(req.body?.produtoId,250),p=(await publico()).find(x=>String(x.id)===prodId&&valido(x));if(!p)return res.status(404).json({erro:'Produto indisponível.'});const tables=await q("SELECT to_regclass('public.uk_identidades') AS identidades,to_regclass('public.uk_favoritos') AS favoritos");if(tables.rows[0]?.identidades&&tables.rows[0]?.favoritos){const i=await q('INSERT INTO public.uk_identidades(usuario) VALUES($1) ON CONFLICT(usuario) DO UPDATE SET usuario=EXCLUDED.usuario RETURNING id',[req.user.usuario]);await q('INSERT INTO public.uk_favoritos(identidade_id,produto_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[i.rows[0].id,prodId]);}else{const id=await cliente(req);await q('INSERT INTO public.vitrine_favoritos(cliente_id,produto_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[id,prodId]);}res.status(201).json({ok:true})}));
+ router.delete('/favoritos/:id',auth,wrap(async(req,res)=>{const tables=await q("SELECT to_regclass('public.uk_identidades') AS identidades,to_regclass('public.uk_favoritos') AS favoritos");if(tables.rows[0]?.identidades&&tables.rows[0]?.favoritos){const i=await q('SELECT id FROM public.uk_identidades WHERE usuario=$1',[req.user.usuario]);if(i.rows[0])await q('DELETE FROM public.uk_favoritos WHERE identidade_id=$1 AND produto_id=$2',[i.rows[0].id,txt(req.params.id,250)]);}else{const id=await cliente(req);await q('DELETE FROM public.vitrine_favoritos WHERE cliente_id=$1 AND produto_id=$2',[id,txt(req.params.id,250)])}res.json({ok:true})}));
  // Carrinho de compras futuras independente do perfil: cliente, admin ou afiliado.
  // Nunca altera a tabela de afiliados nem as regras de comissão.
  function idComprador(req){const perfil=txt(req.user?.perfil,30),usuario=txt(req.user?.usuario,80);if(!['cliente','admin','afiliado'].includes(perfil)||!usuario){const e=Error('Entre com sua conta da Uti Like para guardar produtos.');e.status=403;throw e}return {perfil,usuario}}
+ async function modoCarrinho(){
+  const r=await q("SELECT to_regclass('public.uk_identidades') AS identidades,to_regclass('public.uk_carrinho_itens') AS itens");
+  return r.rows[0]?.identidades&&r.rows[0]?.itens?'identidade':'checkout';
+ }
  async function idCarrinhoComprador(req){
-  const comprador=idComprador(req),usuario=comprador.usuario,perfil=comprador.perfil==='admin'?'admin':'cliente',db=await pool.connect();
+  const comprador=idComprador(req),usuario=comprador.usuario,perfil=comprador.perfil;
+  if(await modoCarrinho()==='identidade'){
+   const r=await q('INSERT INTO public.uk_identidades(usuario) VALUES($1) ON CONFLICT(usuario) DO UPDATE SET usuario=EXCLUDED.usuario RETURNING id',[usuario]);
+   return {modo:'identidade',id:r.rows[0].id,usuario,perfil};
+  }
+  const db=await pool.connect();
   try{await db.query('BEGIN');
    const r=await db.query(`INSERT INTO checkout_uk.carrinhos_guardados(perfil,usuario)
     VALUES($1,$2) ON CONFLICT(perfil,usuario) DO UPDATE SET atualizado_em=checkout_uk.carrinhos_guardados.atualizado_em
@@ -147,11 +156,13 @@ module.exports=function criarVitrine({pool,auth,soAdmin,lerCatalogoPublico}){
     }
     await db.query('UPDATE checkout_uk.carrinhos_guardados SET migrado_legado=true WHERE id=$1',[id]);
    }
-   await db.query('COMMIT');return id;
+   await db.query('COMMIT');return {modo:'checkout',id,usuario,perfil};
   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e}finally{db.release()}
  }
  async function listaCarrinho(req){const cart=await idCarrinhoComprador(req);
-  const rows=await q('SELECT id,produto_id,variacao_id,quantidade FROM checkout_uk.carrinho_itens_guardados WHERE carrinho_id=$1 ORDER BY criado_em,id',[cart]);
+  const rows=cart.modo==='identidade'
+   ?await q('SELECT id,produto_id,variacao_id,quantidade FROM public.uk_carrinho_itens WHERE identidade_id=$1 ORDER BY criado_em,id',[cart.id])
+   :await q('SELECT id,produto_id,variacao_id,quantidade FROM checkout_uk.carrinho_itens_guardados WHERE carrinho_id=$1 ORDER BY criado_em,id',[cart.id]);
   const produtos=new Map((await publico()).map(p=>[String(p.id),p]));
   return rows.rows.map(x=>{const p=produtos.get(x.produto_id);const disp=!!p&&valido(p)&&!(p.estoque!=null&&Number(p.estoque)<=0);
    return {id:x.id,produtoId:x.produto_id,variacaoId:x.variacao_id,quantidade:x.quantidade,disponivel:disp,
@@ -165,15 +176,18 @@ module.exports=function criarVitrine({pool,auth,soAdmin,lerCatalogoPublico}){
   const vars=Array.isArray(p.variantes)?p.variantes:[];
   if(vars.length&&!v)return res.status(400).json({erro:'Selecione a variação do produto antes de guardá-lo.'});
   if(v&&vars.length&&!vars.some(x=>String(x.id??x.vid??'')===v))return res.status(400).json({erro:'Variação inválida.'});
-  await q(`INSERT INTO checkout_uk.carrinho_itens_guardados(carrinho_id,produto_id,variacao_id,quantidade)
+  if(cart.modo==='identidade')await q(`INSERT INTO public.uk_carrinho_itens(identidade_id,produto_id,variacao_id,quantidade)
+   VALUES($1,$2,$3,$4) ON CONFLICT(identidade_id,produto_id,variacao_id)
+   DO UPDATE SET quantidade=LEAST(99,public.uk_carrinho_itens.quantidade+EXCLUDED.quantidade),atualizado_em=now()`,[cart.id,pid,v,n]);
+  else await q(`INSERT INTO checkout_uk.carrinho_itens_guardados(carrinho_id,produto_id,variacao_id,quantidade)
    VALUES($1,$2,$3,$4) ON CONFLICT(carrinho_id,produto_id,variacao_id)
-   DO UPDATE SET quantidade=LEAST(99,checkout_uk.carrinho_itens_guardados.quantidade+EXCLUDED.quantidade),atualizado_em=now()`,[cart,pid,v,n]);
+   DO UPDATE SET quantidade=LEAST(99,checkout_uk.carrinho_itens_guardados.quantidade+EXCLUDED.quantidade),atualizado_em=now()`,[cart.id,pid,v,n]);
   res.status(201).json({ok:true,itens:await listaCarrinho(req)});
  }));
  router.patch('/carrinho/itens/:id',auth,wrap(async(req,res)=>{const cart=await idCarrinhoComprador(req),n=Number(req.body?.quantidade);if(!uuid(req.params.id)||!Number.isInteger(n)||n<1||n>99)return res.status(400).json({erro:'Item ou quantidade inválidos.'});
-  const r=await q('UPDATE checkout_uk.carrinho_itens_guardados SET quantidade=$3,atualizado_em=now() WHERE id=$1 AND carrinho_id=$2 RETURNING id',[req.params.id,cart,n]);if(!r.rowCount)return res.status(404).json({erro:'Item não encontrado.'});res.json({ok:true,itens:await listaCarrinho(req)});
+  const r=cart.modo==='identidade'?await q('UPDATE public.uk_carrinho_itens SET quantidade=$2,atualizado_em=now() WHERE id=$1 AND identidade_id=$3 RETURNING id',[req.params.id,n,cart.id]):await q('UPDATE checkout_uk.carrinho_itens_guardados SET quantidade=$3,atualizado_em=now() WHERE id=$1 AND carrinho_id=$2 RETURNING id',[req.params.id,cart.id,n]);if(!r.rowCount)return res.status(404).json({erro:'Item não encontrado.'});res.json({ok:true,itens:await listaCarrinho(req)});
  }));
- router.delete('/carrinho/itens/:id',auth,wrap(async(req,res)=>{const cart=await idCarrinhoComprador(req);if(!uuid(req.params.id))return res.status(400).json({erro:'Item inválido.'});await q('DELETE FROM checkout_uk.carrinho_itens_guardados WHERE id=$1 AND carrinho_id=$2',[req.params.id,cart]);res.json({ok:true,itens:await listaCarrinho(req)})}));
+ router.delete('/carrinho/itens/:id',auth,wrap(async(req,res)=>{const cart=await idCarrinhoComprador(req);if(!uuid(req.params.id))return res.status(400).json({erro:'Item inválido.'});if(cart.modo==='identidade')await q('DELETE FROM public.uk_carrinho_itens WHERE id=$1 AND identidade_id=$2',[req.params.id,cart.id]);else await q('DELETE FROM checkout_uk.carrinho_itens_guardados WHERE id=$1 AND carrinho_id=$2',[req.params.id,cart.id]);res.json({ok:true,itens:await listaCarrinho(req)})}));
  router.get('/notificacoes',auth,wrap(async(req,res)=>{const id=await cliente(req);const r=await q('SELECT id,tipo,titulo,corpo,destino,criado_em,lida_em FROM public.vitrine_notificacoes WHERE cliente_id=$1 ORDER BY criado_em DESC LIMIT 100',[id]);res.set('Cache-Control','no-store').json({itens:r.rows,naoLidas:r.rows.filter(x=>!x.lida_em).length})}));
  router.patch('/notificacoes/:id/ler',auth,wrap(async(req,res)=>{const id=await cliente(req);if(!uuid(req.params.id))return res.status(400).json({erro:'ID inválido.'});const r=await q('UPDATE public.vitrine_notificacoes SET lida_em=COALESCE(lida_em,now()) WHERE id=$1 AND cliente_id=$2 RETURNING id',[req.params.id,id]);if(!r.rowCount)return res.status(404).json({erro:'Mensagem não encontrada.'});res.json({ok:true})}));
  // ADMIN: controles reais no Neon; nenhuma mensagem vai para e-mail ou Web Push nesta etapa.

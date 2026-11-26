@@ -21,6 +21,9 @@
   async api(url,opts={}){const h={...(opts.body!==undefined?{'Content-Type':'application/json'}:{}),...(opts.headers||{})};let r;try{r=await fetch(url,{...opts,headers:h,credentials:'same-origin',cache:'no-store'})}catch{throw Error('Falha de conexão com o servidor.')}const d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(Error(d.erro||'Falha HTTP '+r.status),{status:r.status});return d},
   image(v){try{const u=new URL(String(v||''),location.origin);return !u.username&&!u.password&&(u.protocol==='https:'||u.origin===location.origin&&u.protocol==='http:')?u.href:null}catch{return null}},
   el(tag,cls,content){const x=document.createElement(tag);if(cls)x.className=cls;if(content!==undefined)x.textContent=content;return x},
+  tracking(){const p=new URLSearchParams(location.search),out=new URLSearchParams(),ref=text(p.get('ref'),80),afiliado=text(p.get('afiliado'),80);if(ref)out.set('ref',ref);if(afiliado)out.set('afiliado',afiliado);return out},
+  contextHref(href){try{const u=new URL(href,location.href);if(u.origin!==location.origin)return href;const t=this.tracking();for(const [k,v] of t)if(!u.searchParams.has(k))u.searchParams.set(k,v);return u.pathname.split('/').pop()+u.search+u.hash}catch{return href}},
+  async captureTracking(){const p=this.tracking(),afiliado=p.get('afiliado')||(p.get('ref')==='admin'?'admin':'');if(!afiliado)return;await this.api('/api/uk/referencia',{method:'POST',body:JSON.stringify({afiliado,origem:'loja'})}).catch(()=>{});document.querySelectorAll('a[href]').forEach(a=>{const href=a.getAttribute('href');if(href&&!href.startsWith('#')&&!href.startsWith('http'))a.setAttribute('href',this.contextHref(href))})},
   card(p){const a=this.el('a','recommend-card');a.href='produto.html?id='+encodeURIComponent(String(p.id));const photo=this.el('div','recommend-photo'),url=this.image(p.imagem||p.image);if(url){const im=this.el('img');im.src=url;im.alt=text(p.nome||p.name||'Produto');im.loading='lazy';im.decoding='async';im.referrerPolicy='no-referrer';photo.append(im)}else photo.textContent='Imagem indisponível';a.append(photo,this.el('div','recommend-details'));a.lastChild.append(this.el('div','recommend-name',text(p.nome||p.name)),this.el('div','recommend-price',this.money(p.precoPor??p.preco??p.price)));return a},
   sacola(){return cached.map(x=>({...x}))},
   refreshSacolaCount(){const n=cached.reduce((s,x)=>s+x.quantidade,0);document.querySelectorAll('[data-bag-count]').forEach(el=>{el.textContent=n>99?'99+':String(n);el.hidden=n===0});return n},
@@ -51,8 +54,9 @@
  root.UK=UK;
  const started=(async()=>{
   try{const s=await UK.api('/api/uk/sessao');currentUser=s.user||null}catch{currentUser=null}
+  try{await UK.captureTracking()}catch{}
   try{await UK._legacy();const d=await UK.api('/api/uk/sacola');cached=norm(d.itens);loaded=true;emit()}catch(e){console.warn('Sacola central indisponível:',e.message)}
   root.dispatchEvent(new Event('uk:sessao-pronta'));return UK.auth();
  })();
- root.addEventListener('focus',()=>{if(loaded)UK.sincronizarSacola().catch(()=>{})});
+ if(root.addEventListener)root.addEventListener('focus',()=>{if(loaded)UK.sincronizarSacola().catch(()=>{})});
 })(window);

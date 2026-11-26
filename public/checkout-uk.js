@@ -14,8 +14,8 @@
  function organizarMobile(){const grid=$('checkoutGrid');if(!grid||grid.querySelector('.uk-mobile-sequence'))return;const [left,mid,right]=grid.children;
   const sections={experience:$('experience-panel'),recommend:$('recommend-panel'),cart:$('cart-panel'),coupon:$('coupons-panel'),summary:right.querySelector('.summary-panel'),delivery:$('delivery-panel'),payment:$('payment-panel'),assurances:$('assurances-panel'),preparation:$('preparation-panel'),testInfo:$('testInfo')};
   const mobile=node('section','uk-mobile-sequence stack');mobile.setAttribute('aria-label','Etapas do checkout');grid.prepend(mobile);
-  const desktop=[[left,['cart','delivery','coupon']],[mid,['payment','recommend','experience']],[right,['summary','assurances','preparation','testInfo']]];
-  const mobileSequence=['experience','recommend','cart','coupon','summary','delivery','payment','assurances','preparation','testInfo'];
+  const desktop=[[left,['cart','coupon','delivery']],[mid,['payment','recommend','experience']],[right,['summary','assurances','preparation','testInfo']]];
+  const mobileSequence=['cart','coupon','delivery','summary','payment','recommend','experience','assurances','preparation','testInfo'];
   const media=window.matchMedia('(max-width:800px)');function sync(){if(media.matches){for(const k of mobileSequence)if(sections[k])mobile.append(sections[k])}else{for(const [dest,keys] of desktop)for(const k of keys)if(sections[k])dest.append(sections[k])}}
   sync();if(media.addEventListener)media.addEventListener('change',sync);else media.addListener(sync);
  }
