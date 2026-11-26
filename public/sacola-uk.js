@@ -31,7 +31,7 @@
   try{const d=await UK.api('/api/vitrine/produtos/resumo',{method:'POST',body:JSON.stringify({ids:[...new Set(items.map(x=>x.produtoId))]})});resumos=new Map((d.itens||[]).map(p=>[String(p.id),p]));render();status('Produtos carregados. O checkout confirmará os preços e o estoque antes da compra.')}
   catch(e){resumos.clear();render();status('Não foi possível consultar o catálogo: '+e.message,true)}
  }
- $('goCheckoutBtn').onclick=()=>{if(!UK.sacola().length)return;location.href='checkout.html?origem=sacola'};
+ $('goCheckoutBtn').onclick=()=>{if(!UK.sacola().length)return;location.href=UK.contextHref('checkout.html?origem=sacola')};
  UK.bottom('sacola.html');UK.ready.then(load).catch(e=>status(e.message,true));
  window.addEventListener('uk:sacola-alterada',()=>{items=UK.sacola();render()});
 })();

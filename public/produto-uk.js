@@ -2,7 +2,7 @@
 (()=>{
  const paramsProduto=new URLSearchParams(location.search);
  const indicadorProduto=paramsProduto.get('afiliado')||((paramsProduto.get('ref')||'')==='admin'?'admin':'');
- if(indicadorProduto)UK.api('/api/uk/referencia',{method:'POST',body:JSON.stringify({afiliado:indicadorProduto,origem:'produto'})}).catch(e=>console.warn('Referência não validada:',e.message));
+ if(indicadorProduto)UK.api('/api/uk/referencia',{method:'POST',body:JSON.stringify({ref:paramsProduto.get('ref')||'',afiliado:indicadorProduto,origem:'produto'})}).catch(e=>console.warn('Referência não validada:',e.message));
  const $=id=>document.getElementById(id),id=(paramsProduto.get('id')||'').trim();let product=null,media=[],current=0,selectedVariant='',recPage=0,recBusy=false,recMore=true,recObserver=null;const recSeen=new Set();
  const recOrdem=UK.novaOrdem(),recPrimeiroChave='uk_vitrine_extra_primeiro_v1:'+id;
  let recEvitarPrimeiro='';try{recEvitarPrimeiro=sessionStorage.getItem(recPrimeiroChave)||''}catch{}

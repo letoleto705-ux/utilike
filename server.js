@@ -571,12 +571,12 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
     if (perfil === 'afiliado') {
       let patrocinadorId = 'admin', patrocinadorUsuario = null;
       const refCookie=(()=>{
-        for(const [nome,tipo] of [['uk_convite','convite'],['uk_indicacao','indicacao']]){
+        for(const [nome,tipo] of [['uk_convite','convite']]){
           try{const x=jwt.verify(lerCookieUK(req,nome),JWT_SECRET);if(x.tipo===tipo&&x.exp>Date.now())return x.usuario}catch{}
         }
         return null;
       })();
-      const indicador = normUsuario(refCookie||req.body.indicador);
+      const indicador = normUsuario(req.body.afiliado || ((req.body.ref || '') !== 'admin' ? req.body.ref : '') || refCookie || req.body.indicador);
       if (indicador && indicador !== 'admin' && indicador !== usuario) {
         const pai = (await client.query('SELECT id, usuario FROM afiliados WHERE usuario = $1', [indicador])).rows[0];
         if (pai) {
@@ -674,12 +674,12 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
 
     let patrocinadorId = 'admin', patrocinadorUsuario = null;
     const refCookie=(()=>{
-        for(const [nome,tipo] of [['uk_convite','convite'],['uk_indicacao','indicacao']]){
+        for(const [nome,tipo] of [['uk_convite','convite']]){
           try{const x=jwt.verify(lerCookieUK(req,nome),JWT_SECRET);if(x.tipo===tipo&&x.exp>Date.now())return x.usuario}catch{}
         }
         return null;
       })();
-      const indicador = normUsuario(refCookie||req.body.indicador);
+      const indicador = normUsuario(req.body.afiliado || ((req.body.ref || '') !== 'admin' ? req.body.ref : '') || refCookie || req.body.indicador);
     if (indicador && indicador !== 'admin' && indicador !== usuario) {
       const pai = (await client.query('SELECT id, usuario FROM afiliados WHERE usuario = $1', [indicador])).rows[0];
       if (pai) {

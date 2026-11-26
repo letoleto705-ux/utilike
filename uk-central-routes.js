@@ -32,12 +32,6 @@ module.exports=function centralUK({pool,auth,soAdmin,jwtSecret,limitarTentativas
  SELECT $1,produto_id,variacao_id,quantidade FROM checkout_uk.uk_sacola_itens WHERE identidade=$2
  ON CONFLICT(identidade,produto_id,variacao_id) DO UPDATE SET quantidade=LEAST(99,checkout_uk.uk_sacola_itens.quantidade+EXCLUDED.quantidade),atualizado_em=now()`,[to,from]);await db.query('DELETE FROM checkout_uk.uk_sacola_itens WHERE identidade=$1',[from])}await db.query('COMMIT')}catch(e){await db.query('ROLLBACK').catch(()=>{});throw e}finally{db.release()}}
  async function reconcile(req,res){const id=owner(req,res);if(req.user){
-  const ref=decode(req,'uk_indicacao');if(ref?.tipo==='indicacao'&&ref.exp>Date.now()&&ref.usuario!==req.user.usuario){
-   await pool.query(`INSERT INTO checkout_uk.uk_atribuicoes(identidade,afiliado_usuario,origem,expira_em)
-    VALUES($1,$2,$3,to_timestamp($4/1000.0)) ON CONFLICT(identidade) DO UPDATE SET
-    afiliado_usuario=EXCLUDED.afiliado_usuario,origem=EXCLUDED.origem,registrado_em=now(),expira_em=EXCLUDED.expira_em
-    WHERE checkout_uk.uk_atribuicoes.expira_em<now()`,[id,ref.usuario,ref.origem,ref.exp]);
-  }
 const visitor=decode(req,'uk_visitante');if(visitor?.tipo==='visitante'&&visitor.id)await merge('visitante:'+visitor.id,id,'visita:'+visitor.id);
   // Conserva a sacola 009 anterior para ambos perfis, se existir, sem copiar repetidamente.
   const exists=await pool.query("SELECT to_regclass('checkout_uk.sacola_itens') AS tabela");if(exists.rows[0]?.tabela){const db=await pool.connect();try{await db.query('BEGIN');const marker='sacola_009:'+req.user.usuario;const got=await db.query('INSERT INTO checkout_uk.uk_sacola_migracoes(identidade,origem) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING identidade',[id,marker]);if(got.rowCount)await db.query(`INSERT INTO checkout_uk.uk_sacola_itens(identidade,produto_id,variacao_id,quantidade)
@@ -55,14 +49,13 @@ const visitor=decode(req,'uk_visitante');if(visitor?.tipo==='visitante'&&visitor
  r.get('/sessao',wrap(async(req,res)=>{res.set('Cache-Control','no-store').json({autenticado:!!req.user,user:await publicUser(req),identidade:identity(req)})}));
  r.post('/sair',wrap(async(req,res)=>{cookie(req,res,'uk_sessao','',0);cookie(req,res,'uk_visitante','',0);res.json({ok:true})}));
  // Referência comercial não é autenticação. Nunca concede privilégios.
- r.post('/referencia',wrap(async(req,res)=>{const indicador=nick(req.body?.afiliado||req.body?.indicador||'admin');const origem=nick(req.body?.origem||'loja');if(!/^[a-z0-9_.-]{3,30}$/.test(indicador))return res.status(400).json({erro:'Referência inválida.'});if(indicador!=='admin'){const found=await pool.query('SELECT usuario FROM afiliados WHERE usuario=$1',[indicador]);if(!found.rowCount)return res.status(404).json({erro:'Afiliado indicado não encontrado.'})}
-  // Primeiro indicador válido durante 30 dias. Visitante não consegue falsificar cookie sem segredo.
-  const prev=decode(req,'uk_indicacao');const saved=prev?.tipo==='indicacao'&&prev.exp>Date.now()?prev:null;
-  const ref=saved||{tipo:'indicacao',usuario:indicador,origem,exp:Date.now()+30*86400*1000};
-  cookie(req,res,'uk_indicacao',jwt.sign(ref,jwtSecret,{expiresIn:'30d'}),30*86400);
-  if(req.user && ref.usuario!==req.user.usuario){const id=identity(req);await pool.query(`INSERT INTO checkout_uk.uk_atribuicoes(identidade,afiliado_usuario,origem,expira_em) VALUES($1,$2,$3,to_timestamp($4/1000.0)) ON CONFLICT(identidade) DO UPDATE SET afiliado_usuario=EXCLUDED.afiliado_usuario,origem=EXCLUDED.origem,registrado_em=now(),expira_em=EXCLUDED.expira_em WHERE checkout_uk.uk_atribuicoes.expira_em<now()`,[id,ref.usuario,ref.origem,ref.exp])}
-  res.json({ok:true,afiliado:ref.usuario,origem:ref.origem})}));
- r.get('/referencia',wrap(async(req,res)=>{const ref=decode(req,'uk_indicacao');const id=identity(req);const row=id?(await pool.query('SELECT afiliado_usuario,origem FROM checkout_uk.uk_atribuicoes WHERE identidade=$1 AND expira_em>now()',[id])).rows[0]:null;res.json({afiliado:row?.afiliado_usuario||ref?.usuario||'admin',origem:row?.origem||ref?.origem||'loja'})}));
+ // O cookie é somente fallback de indicação e expira em 15 dias; uk_sessao continua exclusivo da autenticação.
+ const INDICATION_COOKIE='uk_indicacao',INDICATION_MAX_AGE=15*86400;
+ r.post('/referencia',wrap(async(req,res)=>{const hasRef=req.body&&Object.prototype.hasOwnProperty.call(req.body,'ref'),hasAffiliate=req.body&&Object.prototype.hasOwnProperty.call(req.body,'afiliado');const ref=nick(req.body?.ref||'');const indicador=nick(hasAffiliate?req.body?.afiliado:(ref&&ref!=='admin'?ref:'admin'));const origem=nick(req.body?.origem||'loja');if(!/^[a-z0-9_.-]{3,30}$/.test(indicador))return res.status(400).json({erro:'Referência inválida.'});if(indicador!=='admin'){const found=await pool.query('SELECT usuario FROM afiliados WHERE usuario=$1',[indicador]);if(!found.rowCount)return res.status(404).json({erro:'Afiliado indicado não encontrado.'})}
+  cookie(req,res,INDICATION_COOKIE,jwt.sign({tipo:'indicacao',ref:ref||'admin',afiliado:indicador,origem},jwtSecret,{expiresIn:'15d'}),INDICATION_MAX_AGE);
+  if(req.user && indicador!==req.user.usuario){const id=identity(req);await pool.query(`INSERT INTO checkout_uk.uk_atribuicoes(identidade,afiliado_usuario,origem,expira_em) VALUES($1,$2,$3,now()+interval '15 days') ON CONFLICT(identidade) DO UPDATE SET afiliado_usuario=EXCLUDED.afiliado_usuario,origem=EXCLUDED.origem,registrado_em=now(),expira_em=EXCLUDED.expira_em`,[id,indicador,origem])}
+  res.json({ok:true,ref:ref||'admin',afiliado:indicador,origem})}));
+ r.get('/referencia',wrap(async(req,res)=>{const hasRef=Object.prototype.hasOwnProperty.call(req.query||{},'ref'),hasAffiliate=Object.prototype.hasOwnProperty.call(req.query||{},'afiliado');const urlRef=nick(req.query?.ref||''),urlAfiliado=nick(req.query?.afiliado||'');const saved=decode(req,INDICATION_COOKIE),cookieRef=saved?.tipo==='indicacao'?nick(saved.ref):'',cookieAffiliate=saved?.tipo==='indicacao'?nick(saved.afiliado):'';const id=identity(req);const row=!hasRef&&!hasAffiliate&&id?(await pool.query('SELECT afiliado_usuario,origem FROM checkout_uk.uk_atribuicoes WHERE identidade=$1 AND expira_em>now()',[id])).rows[0]:null;const ref=hasRef?urlRef:(hasAffiliate?'admin':cookieRef||'admin');const affiliate=hasAffiliate?urlAfiliado:(hasRef?(urlRef&&urlRef!=='admin'?urlRef:'admin'):cookieAffiliate||row?.afiliado_usuario||'admin');res.json({ref:ref||'admin',afiliado:affiliate||'admin',origem:saved?.origem||row?.origem||'loja'})}));
 
  // Converte a conta de cliente existente em afiliado; NÃO duplica cadastro da pessoa.
  r.post('/afiliar',auth,wrap(async(req,res)=>{
@@ -70,7 +63,7 @@ const visitor=decode(req,'uk_visitante');if(visitor?.tipo==='visitante'&&visitor
   const usuario=nick(req.user.usuario),pix=text(req.body?.pix,100);
   if(!pix||pix.length<3||/[<>\x00-\x1f]/.test(pix))return res.status(400).json({erro:'Informe uma chave Pix válida.'});
   const referral=decode(req,'uk_convite');
-  const venda=decode(req,'uk_indicacao');const indicador=nick((referral?.tipo==='convite'&&referral.exp>Date.now()?referral.usuario:null)||(venda?.tipo==='indicacao'&&venda.exp>Date.now()?venda.usuario:null)||req.body?.indicador||'admin');
+  const indicador=nick((referral?.tipo==='convite'&&referral.exp>Date.now()?referral.usuario:null)||req.body?.afiliado||((req.body?.ref||'')!=='admin'?req.body?.ref:null)||req.body?.indicador||'admin');
   const db=await pool.connect();try{await db.query('BEGIN');
    const account=(await db.query('SELECT usuario,nome,email,cpf,telefone,senha_hash FROM contas WHERE usuario=$1 FOR UPDATE',[usuario])).rows[0];
    if(!account)throw Object.assign(Error('Conta de cliente não encontrada.'),{status:404});

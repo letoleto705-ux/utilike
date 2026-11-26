@@ -196,3 +196,24 @@ Nenhuma funcionalidade deve ser descrita como homologada sem evidência no ambie
 **Situação atual:** Parcial, preparada para homologação local.
 **Pendências:** Confirmar no Neon de homologação qual conjunto de migrations está instalado; testar login admin/cliente/afiliado, carrinho, favoritos, referência e checkout sem criar pedido; validar visualmente em Render antes de publicar.
 **Próxima etapa recomendada:** Executar smoke test autenticado em ambiente de homologação, sem cobrança, e revisar os testes legados para o contrato atual.
+
+### Registro - propagação de ref e afiliado pela URL
+
+**Data:** 2026-11-26
+**Gatilho:** VITRINE, CHECKOUT e AFILIADOS
+**Solicitação do administrador:** Priorizar `ref` e `afiliado` visíveis na URL e reduzir a dependência do cookie `uk_indicacao`, sem alterar layout, CSS, SQL, commit, push ou deploy.
+**Diagnóstico realizado:** A referência era capturada na URL, mas a navegação dependia principalmente do cookie `uk_indicacao` e alguns redirecionamentos removiam os parâmetros. O checkout também não recebia explicitamente o contexto ativo da URL.
+**Arquivos analisados:** `AGENTS.md`, `docs/HISTORICO_DESENVOLVIMENTO.md`, `docs/ESTADO_ATUAL_PROJETO.md`, `public/index.html`, `public/vitrine-uk.js`, `public/login-uk.js`, `public/produto-uk.js`, `public/carrinho-uk.js`, `public/sacola-uk.js`, `public/checkout-uk.js`, `server.js`, `uk-central-routes.js` e `checkout-uk-routes.js`.
+**Arquivos modificados:** `public/index.html`, `public/vitrine-uk.js`, `public/login-uk.js`, `public/produto-uk.js`, `public/carrinho-uk.js`, `public/sacola-uk.js`, `public/checkout-uk.js`, `server.js`, `uk-central-routes.js`, `checkout-uk-routes.js` e este arquivo.
+**Arquivos criados:** Nenhum.
+**Arquivos excluídos:** Nenhum.
+**Alterações no backend:** A rota de referência passou a receber `ref` e `afiliado` do estado ativo, sem criar/ler o cookie `uk_indicacao`. O cadastro e a conversão para afiliado aceitam a indicação enviada pela URL. O checkout resolve a atribuição pela URL enviada no payload, usando a atribuição da conta apenas como fallback; pedidos de teste gravam o afiliado direto atribuído.
+**Alterações no frontend:** Criado estado de aba `uk_ref_context_v2` para manter o contexto quando uma página não o recebe diretamente. A URL é atualizada com `history.replaceState`, os links internos, login, produto, carrinho, sacola e checkout preservam os parâmetros, e o checkout envia `ref`/`afiliado` explicitamente em cotação, sugestões e pedido-teste. Nenhum CSS ou layout foi alterado.
+**Alterações no banco de dados:** Nenhuma. Nenhum SQL, migração ou acesso ao Neon foi executado.
+**Testes executados:** `node --check` nos módulos backend/frontend alterados, `npm.cmd run check`, `node --test tests/afiliados-3-niveis.test.js`, `git diff --check` e busca por `uk_indicacao` em JavaScript/HTML.
+**Resultado dos testes:** Sintaxe, check do projeto e os dois testes da cadeia de três níveis passaram. Não foram encontrados usos de `uk_indicacao` em JavaScript ou HTML. Não houve homologação autenticada no Render/Neon.
+**Commit realizado:** Não
+**Push realizado:** Não
+**Situação atual:** Implementação preparada para homologação; não considerar produção concluída.
+**Pendências:** Validar no navegador com afiliados reais de níveis 1, 2 e 3, confirmar cookies/URL no Render e verificar o fluxo de pedido pago quando a cobrança for autorizada.
+**Próxima etapa recomendada:** Testar `index.html?ref=admin&afiliado=nivel3`, seguir para produto, login, sacola, carrinho e checkout, confirmando os parâmetros na barra de endereço e a atribuição no JSON do checkout.

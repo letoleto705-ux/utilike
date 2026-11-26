@@ -1,9 +1,10 @@
+document.addEventListener('DOMContentLoaded',()=>{if(document.getElementById('simulationControls'))return;const x=document.createElement('section');x.id='simulationControls';x.hidden=true;x.style.cssText='margin:12px 0;padding:12px;border:1px solid #e0c879;border-radius:12px;background:#fffaf0';x.innerHTML='<strong>Homologação local — Produto Teste de R$ 100,00</strong><p>Nenhuma cobrança, pedido Neon, fornecedor ou Mercado Pago será acionado.</p><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><label>Nível 1 <input id="testLevel1" maxlength="30"></label><label>% <input id="testRate1" type="number" min="0" max="100"></label><label>Nível 2 <input id="testLevel2" maxlength="30"></label><label>% <input id="testRate2" type="number" min="0" max="100"></label><label>Nível 3 <input id="testLevel3" maxlength="30"></label><label>% <input id="testRate3" type="number" min="0" max="100"></label></div><button id="authorizeTestPayment" type="button">Autorizar pagamento simulado</button><pre id="testSimulationResult" style="white-space:pre-wrap;overflow:auto"></pre>';document.querySelector('#testInfo')?.parentElement.append(x)});
 'use strict';
 /* CHECKOUT UTI LIKE — todos os itens da SACOLA ATUAL, nunca a lista inteira de favoritos.
    Valores calculados pelo catálogo público no servidor. NÃO processa cobranças. */
 (()=>{
  const $=id=>document.getElementById(id),money=n=>UK.money(n),params=new URLSearchParams(location.search);
- let quote=null,profile=null,modoTeste=false,working=false,method='pix',draftKey='',loadingPromise=null;
+ let quote=null,profile=null,modoTeste=false,working=false,method='pix',draftKey='',loadingPromise=null,checkoutSelection=null;
  let recPage=0,recMore=true,recBusy=false,recOrder=UK.novaOrdem(),observer=null,recSeen=new Set(),recLoadEpoch=0;
  const fmtQty=items=>items.reduce((n,x)=>n+Number(x.quantidade||0),0);
  function node(tag,cls,txt){return UK.el(tag,cls,txt)}
@@ -19,7 +20,8 @@
   const media=window.matchMedia('(max-width:800px)');function sync(){if(media.matches){for(const k of mobileSequence)if(sections[k])mobile.append(sections[k])}else{for(const [dest,keys] of desktop)for(const k of keys)if(sections[k])dest.append(sections[k])}}
   sync();if(media.addEventListener)media.addEventListener('change',sync);else media.addListener(sync);
  }
- function currentItems(){return UK.sacola().map(x=>({...x}))}
+ function currentItems(){const all=UK.sacola().map(x=>({...x}));return checkoutSelection?all.filter(x=>checkoutSelection.has(String(x.produtoId))):all}
+ function referencePayload(){const t=UK.tracking();return {ref:t.get('ref')||'',afiliado:t.get('afiliado')||(t.get('ref')==='admin'?'admin':'')}}
  function renderCart(){const wrap=$('cartItems');wrap.replaceChildren();
   if(!quote?.itens?.length){showEmpty('Sua sacola está vazia. Escolha produtos na vitrine ou no Carrinho UK.');return}
   for(const p of quote.itens){const item=node('article','product uk-checkout-item'+(p.disponivel?'':' uk-unavailable'));const photo=node('div','product-visual'),url=UK.image(p.imagem);
@@ -45,10 +47,12 @@
   for(const b of ['finishBtn','mobileFinish'])if($(b))$(b).disabled=!enabled;
  }
  async function updateQty(p,quantity){try{await UK.atualizarSacola(p.produtoId,p.variacaoId,quantity);await reload(true)}catch(e){toast(e.message,true)}}
+ function localTestQuote(items,base){const test=items.filter(x=>UK.ehProdutoTeste(x.produtoId)),rest=base||{itens:[],subtotal:0,desconto:0,frete:null,total:null,moeda:'BRL',pendencias:['frete','pagamento'],indisponiveis:0,atribuicao:{ref:'admin',afiliado:'admin',cadeia:[],comissoes:{niveis:[],comissaoCentral:0,percentualCentral:100}}};if(!test.length)return rest;const qtd=test.reduce((n,x)=>n+x.quantidade,0),line={produtoId:'produto-teste',variacaoId:'',quantidade:qtd,nome:'Produto Teste',imagem:'',categoria:'Homologação',disponivel:true,precoUnitario:100,totalItem:100*qtd},subtotal=Number(rest.subtotal||0)+100*qtd;return {...rest,itens:[...(rest.itens||[]),line],subtotal,total:Number(rest.total??rest.subtotal??0)+100*qtd}}
+ function mostrarSimulacaoTeste(){const panel=$('simulationControls');if(!panel||profile?.perfil!=='admin'||!currentItems().some(x=>UK.ehProdutoTeste(x.produtoId)))return;panel.hidden=false;if(panel.dataset.ready)return;panel.dataset.ready='1';const active=UK.tracking().get('afiliado')||'';if($('testLevel1'))$('testLevel1').value=active;if($('testRate1'))$('testRate1').value='30';if($('testRate2'))$('testRate2').value='10';if($('testRate3'))$('testRate3').value='10';$('authorizeTestPayment').onclick=()=>{const value=Number(quote?.itens?.filter(x=>UK.ehProdutoTeste(x.produtoId)).reduce((n,x)=>n+x.totalItem,0)||0),levels=[1,2,3].map(i=>({nivel:i,usuario:$('testLevel'+i).value.trim(),percentual:Number($('testRate'+i).value||0)})).filter(x=>x.usuario).map(x=>({...x,valor:Math.round(value*x.percentual)/100})),distributed=levels.reduce((n,x)=>n+x.valor,0),result={status:'pago_simulado',produto:'Produto Teste',valor:value,niveis:levels,comissaoCentral:Math.round((value-distributed)*100)/100,autorizadoPor:profile.usuario,data:new Date().toISOString()};localStorage.setItem('uk_produto_teste_resultado_v1',JSON.stringify(result));$('testSimulationResult').textContent=JSON.stringify(result,null,2);status('Pagamento do Produto Teste autorizado apenas localmente pelo administrador. Nenhuma cobrança ou pedido foi criado.')};try{const saved=JSON.parse(localStorage.getItem('uk_produto_teste_resultado_v1')||'null');if(saved)$('testSimulationResult').textContent=JSON.stringify(saved,null,2)}catch{}}
  async function carregarCotacao(){const items=currentItems();
   if(!items.length){quote=null;updateAmounts();status('Sacola vazia. Adicione produtos para preparar a compra.');return}
   set('itemCount','(verificando)');
-  try{quote=await UK.api('/api/checkout-uk/cotacao',{method:'POST',body:JSON.stringify({adicionais:items})});updateAmounts();
+   try{const normal=items.filter(x=>!UK.ehProdutoTeste(x.produtoId));const base=normal.length?await UK.api('/api/checkout-uk/cotacao',{method:'POST',body:JSON.stringify({adicionais:normal,...referencePayload()})}):null;quote=localTestQuote(items,base);updateAmounts();mostrarSimulacaoTeste();
    status(quote.indisponiveis?quote.indisponiveis+' item(ns) indisponível(is). Eles permanecem na sacola até você remover ou o estoque voltar.':'Produtos atualizados com o catálogo do Neon. O pagamento será liberado após a integração do gateway.');
   }catch(e){quote=null;updateAmounts();showEmpty('Falha ao consultar os produtos: '+e.message);status(e.message,true)}
  }
@@ -60,12 +64,13 @@
   }
   if(params.get('origem')==='carrinho'&&UK.auth()){
    let chosen=[];try{const x=JSON.parse(sessionStorage.getItem('uk_checkout_selecao_itens')||'[]');chosen=Array.isArray(x)?x.map(String):[]}catch{}
-   if(chosen.length){const result=await UK.api('/api/vitrine/carrinho');const selected=(result.itens||[]).filter(x=>x.disponivel&&(chosen.includes(String(x.id))||chosen.includes(String(x.produtoId))));
+    if(chosen.length){checkoutSelection=new Set(chosen);const result=await UK.api('/api/vitrine/carrinho');const selected=(result.itens||[]).filter(x=>x.disponivel&&(chosen.includes(String(x.id))||chosen.includes(String(x.produtoId))));
     for(const x of selected)await UK.adicionarSacola(x.produtoId,x.variacaoId,x.quantidade);
+     if(chosen.includes('produto-teste')){const test=UK.carrinhoTeste();if(test)await UK.adicionarSacola(test.produtoId,test.variacaoId,test.quantidade)}
     sessionStorage.removeItem('uk_checkout_selecao_itens');
    }
   }
-  if(direct||params.get('origem')==='carrinho')history.replaceState(null,'','checkout.html?origem=sacola');
+  if(direct||params.get('origem')==='carrinho')history.replaceState(null,'',UK.contextHref('checkout.html?origem=sacola'));
  }
  function renderRecommend(p){const card=node('article','rec'),photo=node('div','rec-img'),url=UK.image(p.imagem);
   if(url){const img=node('img');img.src=url;img.alt=p.nome;img.referrerPolicy='no-referrer';img.loading='lazy';img.decoding='async';photo.append(img)}else photo.append(node('span','missing','Sem foto'));
@@ -78,7 +83,7 @@
  }
  async function sugestoes(reset=false){if(recBusy)return;if(reset){recPage=0;recMore=true;recBusy=false;recSeen.clear();recOrder=UK.novaOrdem();recLoadEpoch++;$('recommendations').replaceChildren();}
   if(!recMore)return;recBusy=true;const epoch=recLoadEpoch,root=$('recommendations');
-  try{const d=await UK.api('/api/checkout-uk/sugestoes',{method:'POST',body:JSON.stringify({adicionais:currentItems(),pagina:recPage+1,limite:18,ordem:recOrder})});
+  try{const d=await UK.api('/api/checkout-uk/sugestoes',{method:'POST',body:JSON.stringify({adicionais:currentItems(),...referencePayload(),pagina:recPage+1,limite:18,ordem:recOrder})});
    if(epoch!==recLoadEpoch)return;
    for(const p of d.itens||[]){const id=String(p.id);if(recSeen.has(id))continue;recSeen.add(id);root.append(renderRecommend(p))}
    recPage=d.pagina;recMore=d.temMais===true;
@@ -100,7 +105,7 @@
    set('profileMessage','Conta conectada: '+(p.nome||p.usuario)+' ('+(p.perfil||'comprador')+'). Confira o endereço e contato.');
    if(!modoTeste)set('testInfo','Rascunhos desativados no servidor. Nenhuma cobrança está habilitada.');
   }catch(e){set('profileMessage','Conta identificada, mas dados do perfil indisponíveis: '+e.message);status('Verifique a migration 009 e a rota de perfil: '+e.message,true)}
-  updateAmounts();
+  updateAmounts();mostrarSimulacaoTeste();
  }
  function uuid(){if(crypto.randomUUID)return crypto.randomUUID();const b=crypto.getRandomValues(new Uint8Array(16));b[6]=b[6]&15|64;b[8]=b[8]&63|128;const h=Array.from(b,x=>x.toString(16).padStart(2,'0')).join('');return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20)}
  function endereco(){return Object.fromEntries(['destinatario','cep','logradouro','numero','complemento','bairro','cidade','uf'].map(k=>[k,($(k)?.value||'').trim()]))}
@@ -109,7 +114,7 @@
   if(!/^\d{8}$/.test(e.cep.replace(/\D/g,''))||!/^[a-zA-Z]{2}$/.test(e.uf)||[e.destinatario,e.logradouro,e.numero,e.bairro,e.cidade].some(x=>!x))return status('Preencha todos os campos obrigatórios do endereço.',true);
   if(!contact.nome||!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(contact.email)||contact.telefone.replace(/\D/g,'').length<10)return status('Informe nome, e-mail e telefone válidos.',true);
   if(!draftKey)draftKey=uuid();working=true;updateAmounts();
-  try{const data=await UK.api('/api/checkout-uk/pedido-teste',{method:'POST',body:JSON.stringify({adicionais:currentItems(),chaveIdempotencia:draftKey,endereco:e,contato:contact,metodo:method})});
+  try{const data=await UK.api('/api/checkout-uk/pedido-teste',{method:'POST',body:JSON.stringify({adicionais:currentItems(),...referencePayload(),chaveIdempotencia:draftKey,endereco:e,contato:contact,metodo:method})});
    const receipt=$('modalReceipt');receipt.replaceChildren(node('p','','Número do pedido de homologação: '+data.id),node('p','','Rascunho — SEM cobrança ou compra real.'));
    $('demoModal').classList.add('open');status('Rascunho criado. Nenhuma cobrança foi efetuada.');
   }catch(err){status(err.message,true);toast(err.message,true)}finally{working=false;updateAmounts()}

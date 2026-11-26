@@ -42,15 +42,16 @@ module.exports=function checkoutUk({pool,auth,lerCatalogoPublico}){
   if(r.rows.length!==new Set(ids).size)throw Object.assign(Error('Seu carrinho mudou. Atualize a seleção.'),{status:409});
   return r.rows.map(x=>({produtoId:x.produto_id,variacaoId:x.variacao_id,quantidade:x.quantidade}));
  }
- async function attribution(req,value){
-  if(!req.user)return {afiliado:null,origem:'loja',cadeia:[],comissoes:commissionDistribution(value,{},[])};
-  const identidade=req.user.perfil==='admin'?'admin:'+req.user.usuario:'pessoa:'+req.user.usuario;
-  const row=(await pool.query('SELECT afiliado_usuario,origem FROM checkout_uk.uk_atribuicoes WHERE identidade=$1 AND expira_em>now()',[identidade])).rows[0];
-  const afiliado=row?.afiliado_usuario&&String(row.afiliado_usuario).toLowerCase()!=='admin'?row.afiliado_usuario:null;
+ async function attribution(req,value,body={}){
+  const identidade=req.user?(req.user.perfil==='admin'?'admin:'+req.user.usuario:'pessoa:'+req.user.usuario):null;
+  const row=identidade?(await pool.query('SELECT afiliado_usuario,origem FROM checkout_uk.uk_atribuicoes WHERE identidade=$1 AND expira_em>now()',[identidade])).rows[0]:null;
+  const urlAfiliado=String(body.afiliado||'').trim().toLowerCase();
+  const urlRef=String(body.ref||'').trim().toLowerCase();
+  const afiliado=(urlAfiliado&&urlAfiliado!=='admin'?urlAfiliado:null)||(urlRef&&urlRef!=='admin'?urlRef:null)||(row?.afiliado_usuario&&String(row.afiliado_usuario).toLowerCase()!=='admin'?row.afiliado_usuario:null);
   const cadeia=afiliado?await resolveAffiliateChain(afiliado,async ref=>(await pool.query('SELECT id,usuario,patrocinador_id FROM afiliados WHERE usuario=$1 OR lower(id)=$1 LIMIT 1',[String(ref).toLowerCase()])).rows[0]||null):[];
   const cfg=Object.fromEntries((await pool.query("SELECT chave,valor FROM config WHERE chave IN ('taxaComissao','taxaPatrocinador','taxaAvo')")).rows.map(x=>[x.chave,x.valor]));
   const taxas={taxaComissao:Number(cfg.taxaComissao??30),taxaPatrocinador:Number(cfg.taxaPatrocinador??10),taxaAvo:Number(cfg.taxaAvo??10)};
-  return {afiliado:afiliado||'admin',origem:row?.origem||'loja',cadeia:cadeia.slice(0,MAX_AFFILIATE_LEVELS),comissoes:commissionDistribution(value,taxas,cadeia)};
+  return {ref:urlRef||'admin',afiliado:afiliado||'admin',origem:row?.origem||'loja',cadeia:cadeia.slice(0,MAX_AFFILIATE_LEVELS),comissoes:commissionDistribution(value,taxas,cadeia)};
  }
  async function calcular(req,b){const raw=inputList(b);const ids=Array.isArray(b?.carrinhoIds)?[...new Set(b.carrinhoIds.map(String))]:[];
   if(ids.length){if(ids.length>4000)throw Object.assign(Error('Seleção muito grande.'),{status:413});raw.push(...await getCartRows(req,ids))}
@@ -69,7 +70,7 @@ module.exports=function checkoutUk({pool,auth,lerCatalogoPublico}){
     disponivel:available,indisponivelMotivo:reason||'',precoUnitario:available?money(unit):null,totalItem:available?money(unit*x.quantidade):null});
   }
   const subtotal=money(itens.reduce((sum,x)=>sum+Number(x.totalItem||0),0));
-  return {itens,subtotal,desconto:0,frete:null,total:null,moeda:'BRL',pendencias:['frete','pagamento'],indisponiveis:itens.filter(x=>!x.disponivel).length,atribuicao:await attribution(req,subtotal)};
+  return {itens,subtotal,desconto:0,frete:null,total:null,moeda:'BRL',pendencias:['frete','pagamento'],indisponiveis:itens.filter(x=>!x.disponivel).length,atribuicao:await attribution(req,subtotal,b)};
  }
  // Mini-vitrine de sugestões com mistura variável das categorias realmente presentes na sacola.
  router.post('/sugestoes',wrap(async(req,res)=>{
@@ -125,10 +126,7 @@ module.exports=function checkoutUk({pool,auth,lerCatalogoPublico}){
    for(const i of cotacao.itens)await db.query(`INSERT INTO checkout_uk.pedido_itens(pedido_id,produto_id,variacao_id,titulo_snapshot,imagem_snapshot,quantidade,preco_unitario,total_item)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[result.rows[0].id,i.produtoId,i.variacaoId,i.nome,i.imagem,i.quantidade,i.precoUnitario,i.totalItem]);
    // Apenas atribuição informativa do pedido. NÃO paga comissões nesta fase.
-   const pessoa=req.user.perfil==='admin'?'admin:'+req.user.usuario:'pessoa:'+req.user.usuario;
-   await db.query(`INSERT INTO checkout_uk.uk_pedido_atribuicoes(pedido_id,afiliado_usuario)
-    SELECT $1,afiliado_usuario FROM checkout_uk.uk_atribuicoes
-    WHERE identidade=$2 AND expira_em>now() ON CONFLICT DO NOTHING`,[result.rows[0].id,pessoa]);
+   if(cotacao.atribuicao.afiliado&&cotacao.atribuicao.afiliado!=='admin')await db.query(`INSERT INTO checkout_uk.uk_pedido_atribuicoes(pedido_id,afiliado_usuario) VALUES($1,$2) ON CONFLICT DO NOTHING`,[result.rows[0].id,cotacao.atribuicao.afiliado]);
    await db.query('COMMIT');return res.status(201).json({id:result.rows[0].id,status:'rascunho',teste:true,cobranca:false,atribuicao:cotacao.atribuicao});
   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e}finally{db.release()}
  }));

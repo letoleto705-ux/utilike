@@ -1,5 +1,13 @@
 # Estado atual do projeto
 
+## Entrega integrada de 2026-11-26
+
+- Carrinho UK persistente e neutro quanto à indicação antiga; a referência ativa é aplicada ao checkout.
+- `uk_indicacao` é fallback assinado de 15 dias; `uk_sessao` permanece exclusivo para autenticação.
+- Produto Teste (`produto-teste`) fica no `localStorage` a R$ 100,00 e não entra em APIs, Neon, fornecedor ou gateway.
+- A autorização simulada pelo administrador grava somente resultado local com até três níveis.
+- Sintaxe, check do projeto, diff e quatro testes focados passaram; não houve homologação autenticada nem SQL.
+
 ## Visão geral
 
 O projeto usa Node.js, Express, PostgreSQL/Neon e frontend HTML/CSS/JavaScript. O ponto de entrada é `server.js`, que serve `public/` e registra APIs de autenticação, vitrine, administração, fornecedores, automação e checkout UK.
