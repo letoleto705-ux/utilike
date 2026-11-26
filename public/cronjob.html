@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Uti Like | Central Cronjob</title>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172640;background:#f3f6fb}
+*{box-sizing:border-box}body{margin:0;min-height:100vh}a{color:inherit}button,input,select,textarea{font:inherit}
+button{cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}
+[hidden]{display:none!important}
+header{background:#10224b;color:#fff;padding:17px max(20px,calc((100vw - 1180px)/2));display:flex;gap:14px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px}.brand-logo{display:grid;place-items:center;background:linear-gradient(135deg,#1665b6,#102c69);border:1px solid #4487d0;border-radius:12px;width:48px;height:48px;color:white;font-size:23px;font-weight:900;letter-spacing:-2px}
+.brand-name{font-size:21px;font-weight:850;line-height:1.2}.brand-name span{color:#ff8a21}.brand-hint{font-size:12px;color:#c1d1e9;margin-top:3px}
+.header-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.header-actions a{display:inline-flex;text-decoration:none;align-items:center;border:1px solid #ffffff4a;border-radius:9px;padding:10px 12px;font-weight:750;font-size:13px}.header-actions a:hover{background:#ffffff20}
+main{max-width:1180px;margin:0 auto;padding:25px 20px 32px}
+h1{font-size:clamp(23px,3vw,30px);margin:0 0 8px;letter-spacing:-.7px}h2{font-size:20px;margin:0 0 12px;letter-spacing:-.3px}p{line-height:1.55}.sub{color:#63738c}.hint{font-size:12px;color:#63738c;line-height:1.6}
+.intro{margin-bottom:20px}.intro .sub{margin:0}.overline{font-size:11px;letter-spacing:.12em;font-weight:800;text-transform:uppercase;color:#2364a6;margin-bottom:6px}
+.module-nav{display:flex;gap:8px;flex-wrap:wrap;padding:8px;border:1px solid #dce5f3;border-radius:16px;background:#fff;box-shadow:0 2px 12px #112b5108;margin-bottom:22px}
+.module-tab{flex:1 1 auto;min-width:150px;display:inline-flex;justify-content:center;align-items:center;gap:7px;padding:12px 14px;border:1px solid transparent;border-radius:11px;background:#f4f7fb;color:#354867;font-size:13px;font-weight:750;min-height:46px;transition:background .15s ease,border-color .15s ease}
+.module-tab:hover{background:#e8effa;border-color:#cbd9ed}.module-tab.active{background:#173a76;color:white;box-shadow:0 2px 7px #102c6040}.module-tab:focus-visible{outline:3px solid #2f93d6;outline-offset:2px}
+.module-view{animation:viewEnter .16s ease}.module-view[hidden]{display:none}@keyframes viewEnter{from{opacity:.65;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+.module-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:0 4px 4px}.module-head h2{margin:0;font-size:16px}.module-hint{font-size:12px;color:#697996}
+.panel{background:#fff;border:1px solid #e0e7f1;border-radius:16px;padding:22px;margin:12px 0 16px;box-shadow:0 2px 10px #172d5208}
+.panel .panel{box-shadow:none;background:#f9fbff}
+.panel h2{color:#142947}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+label{display:grid;gap:6px;font-size:13px;font-weight:750;color:#283952}input,select,textarea{width:100%;padding:11px 12px;border:1px solid #c9d6e6;border-radius:9px;background:white;color:#142847}input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #50a9df;outline-offset:1px}textarea{resize:vertical;min-height:74px}
+.checkbox{display:flex;align-items:center;gap:9px}.checkbox input{width:auto}.actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:16px}
+button.primary,button.green,button.ghost{border:0;border-radius:10px;padding:11px 16px;font-size:13px;font-weight:800;min-height:42px}button.primary{background:#ef761b;color:white}button.green{background:#158449;color:white}button.ghost{background:#ecf2fa;color:#29436d}
+button.primary:hover{background:#d9650e}button.green:hover{background:#10703c}button.ghost:hover{background:#dfe8f5}
+.pill{display:inline-block;padding:5px 9px;background:#eef3fa;border-radius:10px;font-size:11px;font-weight:750}.pill.ok{color:#10783d}.pill.bad{color:#9e3030}.metrics{font-weight:750}
+.scroll{overflow-x:auto}table{width:100%;min-width:850px;border-collapse:collapse}th,td{padding:10px;text-align:left;border-bottom:1px solid #e7edf4;font-size:12px;vertical-align:top}th{background:#f5f8fd;color:#485976}
+.foot{font-size:12px;color:#77869c;margin:22px 3px 0}.frame-wrap{border-radius:13px;overflow:hidden;border:1px solid #d8e4f1;background:#fff;margin-top:14px}.cj-frame{display:block;width:100%;height:980px;border:0;background:white}
+.frame-fallback{font-size:12px;color:#687993;margin-top:6px}.module-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.link-button{display:inline-flex;align-items:center;justify-content:center;background:#123f80;color:white;text-decoration:none;border-radius:10px;padding:11px 15px;font-weight:800;font-size:13px;min-height:42px}.link-button:hover{background:#0c346a}
+.technical-settings{border:1px dashed #c8d8ed;background:#f7faff;border-radius:11px;padding:11px 14px;margin-top:14px}.technical-settings summary{cursor:pointer;font-size:13px;font-weight:800;color:#314969}.technical-settings[open] summary{margin-bottom:12px}
+.notice-inline{border-left:3px solid #e9a33b;background:#fffaf1;padding:10px 12px;border-radius:8px;font-size:12px;color:#6f5729;margin:12px 0}
+@media(max-width:870px){.grid,.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.module-tab{min-width:135px}main{padding:18px 14px}}
+@media(max-width:570px){header{padding:15px}.header-actions a{font-size:12px}main{padding:14px 10px}.module-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.module-tab{min-width:0;padding:12px 7px;font-size:12px}.module-tab:last-child{grid-column:1/-1}.grid,.grid.two{grid-template-columns:1fr}.panel{padding:14px}.cj-frame{height:1000px}.module-head h2{font-size:14px}}
+@media(prefers-reduced-motion:reduce){.module-view{animation:none}.module-tab{transition:none}}
+
+/* Barra horizontal da Reprecificação CJ fixada também na tela integrada ao Cronjob. */
+body.cj-repricing-bar-visible{padding-bottom:calc(86px + env(safe-area-inset-bottom,0px))}
+.cj-horizontal-dock{position:fixed;z-index:5000;left:max(12px,calc((100vw - 1160px)/2));right:max(12px,calc((100vw - 1160px)/2));bottom:max(8px,env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid #b9d0e8;border-radius:14px;background:#f8fbff;box-shadow:0 6px 26px #102e5160;color:#204366}
+.cj-horizontal-dock[hidden]{display:none!important}
+.cj-dock-slider-wrap{min-width:0;flex:1;display:grid;gap:3px}
+.cj-dock-label{font-size:11px;font-weight:800;line-height:1.2;color:#235586}
+.cj-dock-arrow{flex:none;display:grid;place-items:center;width:39px;height:39px;min-height:39px;padding:0;border:1px solid #bbd0e9;border-radius:10px;background:#e6f1ff;color:#1a5794;font-size:24px;line-height:1}
+.cj-dock-range{appearance:none;-webkit-appearance:none;width:100%;margin:0;height:26px;padding:0;border:0;background:transparent;touch-action:pan-x;cursor:ew-resize}
+.cj-dock-range::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:#c8daf0;border:1px solid #abc5e4}
+.cj-dock-range::-moz-range-track{height:8px;border-radius:999px;background:#c8daf0;border:1px solid #abc5e4}
+.cj-dock-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:var(--cj-thumb-size,56px);height:23px;margin-top:-8px;background:#1764ab;border:2px solid white;border-radius:11px;box-shadow:0 1px 5px #0a32645c;cursor:grab}
+.cj-dock-range::-moz-range-thumb{width:var(--cj-thumb-size,56px);height:21px;background:#1764ab;border:2px solid white;border-radius:11px;box-shadow:0 1px 5px #0a32645c;cursor:grab}
+.cj-dock-range:focus-visible{outline:3px solid #6daae2;outline-offset:3px}
+@media(max-width:600px){.cj-horizontal-dock{left:5px;right:5px;bottom:max(5px,env(safe-area-inset-bottom,0px));gap:6px;padding:7px;border-radius:11px}.cj-dock-label{font-size:10px}.cj-dock-arrow{width:36px;height:40px}.cj-dock-range{height:31px}}
+</style>
+</head>
+<body>
+<header>
+ <div class="brand"><div class="brand-logo" aria-hidden="true">UK</div><div><div class="brand-name">Uti <span>Like</span> · Cronjob</div><div class="brand-hint">Central de integrações e publicação</div></div></div>
+ <div class="header-actions"><a href="admin.html">← Administração</a><a href="index.html">Ver vitrine ↗</a></div>
+</header>
+<main>
+ <div class="intro"><div class="overline">Painel de operações</div><h1>Central Cronjob</h1><p class="sub">Selecione um módulo para acessar as funções existentes sem misturar os controles.</p></div>
+ <nav class="module-nav" role="tablist" aria-label="Módulos da Central Cronjob"><button id="tab-integracao-cj" class="module-tab" role="tab" type="button" data-module="integracao-cj" aria-controls="painel-integracao-cj" aria-selected="false" tabindex="-1"><span aria-hidden="true">📦</span>Integração CJ</button><button id="tab-reprecificacao-cj" class="module-tab" role="tab" type="button" data-module="reprecificacao-cj" aria-controls="painel-reprecificacao-cj" aria-selected="false" tabindex="-1"><span aria-hidden="true">📊</span>Reprecificação CJ</button><button id="tab-robo-tradutor" class="module-tab" role="tab" type="button" data-module="robo-tradutor" aria-controls="painel-robo-tradutor" aria-selected="false" tabindex="-1"><span aria-hidden="true">🌐</span>Robô Tradutor</button><button id="tab-precificacao-central" class="module-tab" role="tab" type="button" data-module="precificacao-central" aria-controls="painel-precificacao-central" aria-selected="false" tabindex="-1"><span aria-hidden="true">💰</span>Precificação Central</button><button id="tab-publicacao-automatica" class="module-tab" role="tab" type="button" data-module="publicacao-automatica" aria-controls="painel-publicacao-automatica" aria-selected="false" tabindex="-1"><span aria-hidden="true">⚙️</span>Publicação Automática</button><button id="tab-importacao-neon" class="module-tab" role="tab" type="button" data-module="importacao-neon" aria-controls="painel-importacao-neon" aria-selected="false" tabindex="-1"><span aria-hidden="true">🗄️</span>Importação Neon</button></nav>
+ 
+<section id="painel-integracao-cj" class="module-view" role="tabpanel" aria-labelledby="tab-integracao-cj" hidden>
+ <div class="module-head"><h2>Integração CJ Dropshipping</h2><span class="module-hint">Categorias, importação e sincronização da CJ</span></div>
+ <section class="panel">
+  <p class="sub" style="margin-top:0">Gerencie a integração já existente da CJ Dropshipping, com consulta de categorias, importação, revisão e agendamento. A mesma tela continua acessível separadamente.</p>
+  <div class="module-actions"><a class="link-button" href="cj-dropshipping.html">Abrir integração em página inteira ↗</a></div>
+  <div class="frame-wrap"><iframe id="cjIntegrationFrame" class="cj-frame" title="Integração CJ Dropshipping" loading="lazy" data-src="cj-dropshipping.html"></iframe></div>
+  <p class="frame-fallback">A integração exibida acima é a página CJ existente; nenhum procedimento de importação foi reimplementado.</p>
+ </section>
+</section>
+<section id="painel-reprecificacao-cj" class="module-view" role="tabpanel" aria-labelledby="tab-reprecificacao-cj" hidden>
+ <div class="module-head"><h2>Reprecificação CJ</h2><span class="module-hint">Exclusivo para custos e preços de produtos CJ já publicados</span></div>
+ <section class="panel"><p class="sub" style="margin-top:0">Consulta automática ou manual à API CJ, preço atual, margem individual, proposta e aprovação controlada. Os fornecedores futuros terão seus próprios módulos, sem misturar preços ou regras.</p>
+ <div class="module-actions"><a class="link-button" href="cj-reprecificacao.html" target="_blank" rel="opener" id="abrirReprecificacaoPaginaInteira">Abrir reprecificação CJ em página inteira</a></div>
+ <div class="frame-wrap"><iframe id="cjRepricingFrame" class="cj-frame" title="Reprecificação CJ" loading="lazy" data-src="cj-reprecificacao.html" style="height:1120px"></iframe></div>
+ </section>
+</section>
+
+<section id="painel-robo-tradutor" class="module-view" role="tabpanel" aria-labelledby="tab-robo-tradutor" hidden>
+ <div class="module-head"><h2>Robô Tradutor</h2><span class="module-hint">Aprovação PT-BR antes da publicação</span></div>
+ <section class="panel" id="cjPtbrPanel" style="border:2px solid #14874e;background:#f5fff9">
+<h2>Robô Tradutor · Sincronização PT-BR</h2>
+<p>Já concluiu e gravou a tradução dos produtos CJ? Clique aqui para sincronizar <strong>somente os aprovados PT-BR</strong>. Não precisa importar novamente nem rodar o Cronjob da CJ.</p>
+<div class="actions"><button class="green" id="cjSincronizarPtbr" style="padding:13px 19px" type="button">Sincronizar aprovados PT-BR com a vitrine</button><a href="cj-dropshipping.html" style="display:inline-flex;align-items:center;padding:10px 13px;border-radius:9px;background:#edf2fa;color:#263a62;font-weight:750;text-decoration:none">Abrir painel CJ</a></div>
+<p aria-live="polite" class="hint" id="cjVersaoPtbr">Verificando integração publicada...</p>
+<p aria-live="polite" class="hint" id="cjResultadoPtbr">Aguardando sincronização.</p>
+</section>
+</section>
+<section id="painel-precificacao-central" class="module-view" role="tabpanel" aria-labelledby="tab-precificacao-central" hidden>
+ <div class="module-head"><h2>Precificação Central</h2><span class="module-hint">Regras comerciais salvas no Neon</span></div>
+ <section class="panel" id="pricingPanel" style="border:2px solid #14874e"><h2>Precificação Central</h2><p>Na CJ, a margem é individual no Filtro Inteligente. Aqui permanecem as taxas, reservas, despesas e frete embutido. Configuração persistida no Neon. Zero é permitido. O preço final CJ utiliza a margem individual aprovada e as demais regras desta central. Salvar não altera pedidos antigos; use Recalcular catálogo para aplicar aos produtos já publicados.</p><div class="grid" id="pricingFields"></div><div class="actions"><button class="primary" id="pricingSave" type="button">Salvar regras no Neon</button><button class="green" id="pricingRecalc" type="button">Recalcular catálogo completo</button></div><p aria-live="polite" class="hint" id="pricingMessage"></p><p class="hint" id="pricingStatus"></p></section>
+</section>
+<section id="painel-publicacao-automatica" class="module-view" role="tabpanel" aria-labelledby="tab-publicacao-automatica" hidden>
+ <div class="module-head"><h2>Publicação Automática</h2><span class="module-hint">Agendamento real e sincronização Neon → Vitrine</span></div>
+ <section class="panel" id="autoPanel" style="border:2px solid #2563eb"><h2>Publicação Automática · Neon → Vitrine</h2><p class="sub">Garimpagem continua manual. O envio ao Neon pode ser automático. O Cronjob publica ou atualiza produtos com título, preço observado válido em BRL e imagem; estoque não é obrigatório. Produtos incompletos ficam para revisão.</p><div class="grid"><label class="checkbox"><input id="autoAtivo" style="width:auto" type="checkbox"/> Ativar agendamento</label><label>Intervalo<select id="autoIntervalo"><option value="5">A cada 5 minutos</option><option value="15">A cada 15 minutos</option><option value="30">A cada 30 minutos</option></select></label></div><details class="technical-settings"><summary>Configurações técnicas do agendador não CJ</summary><label hidden>Margem do divisor (somente legado não CJ)<input id="autoMargem" min="0" step="0.1" type="number" value="30"/></label><label>Frete universal incluído no preço (R$)<input id="autoFrete" min="0" step="0.01" type="number" value="20"/></label><label>Reserva de segurança (%)<input id="autoReserva" min="0" step="0.1" type="number" value="0"/></label><p class="notice-inline">Estes campos continuam ligados ao agendador atual. A unificação das regras comerciais requer uma etapa própria no backend; nenhuma fórmula foi alterada nesta atualização visual.</p></details><p class="hint">Preço = (custo observado + frete universal) ÷ (1 − (margem + reserva)/100). O frete já está embutido; não cobrar novamente sem configurar o checkout. Não altera preços de pedidos existentes.</p><div class="actions"><button class="primary" id="autoSalvar" type="button">Salvar configuração</button><button class="green" id="autoAgora" type="button">▶ Ativar agora</button></div><p aria-live="polite" class="hint" id="autoMensagem">Carregando...</p><p aria-live="polite" class="metrics" id="autoEstado">Aguardando...</p><div class="actions"><span class="pill ok" id="autoOk">✓ 0 publicados/atualizados</span><span class="pill bad" id="autoReview">✕ 0 revisão</span><span class="pill bad" id="autoError">⚠ 0 erros</span><span class="pill" id="autoProcessed">0 analisados</span></div></section>
+</section>
+<section id="painel-importacao-neon" class="module-view" role="tabpanel" aria-labelledby="tab-importacao-neon" hidden>
+ <div class="module-head"><h2>Importação Neon</h2><span class="module-hint">Fila, processamento e revisão individual</span></div>
+ <section class="panel" id="bulkQueuePanel" style="border:2px solid #16a34a"><h2>Importação Neon · Fila de Produtos</h2><p class="sub">URLs enviadas pela Administração ficam aqui para processamento pelo conector do fornecedor. A fila exibe URLs reais do Neon, inclusive registros já publicados. A exclusão e a desativação são individuais. Para excluir, confirme Sim ou Não; não é necessário digitar EXCLUIR. Extração de imagens, vídeos, preço e estoque requer integração autorizada com API do fornecedor ou adaptador próprio.</p><p class="sub"><strong>Garimpagem local:</strong> execute <code>executar_garimpagem.bat</code> no seu PC e abra <code>http://localhost:8080</code>. Use os botões "Enviar URLs ao Neon" e "Capturar imagens" no painel local. O site hospedado no Render não pode abrir seu Chrome remotamente.</p><div class="actions"><button class="green" id="bulkStart" type="button">▶ Iniciar importação da fila</button><button class="green" id="bulkRefresh" type="button">Atualizar fila</button></div><div aria-live="polite" class="hint" id="bulkProgress">Processamento não iniciado.</div><div aria-live="polite" class="hint" id="bulkSummary">Conecte-se ao Render para consultar.</div><section class="panel" id="manualPublishPanel" style="border:2px solid #2563eb"><h2>🛍️ Publicação manual de teste na vitrine</h2><p class="sub">Selecione um produto em revisão na fila acima. Confirme nome, categoria, preço e estoque antes de publicar. Preço observado pela Garimpagem não é preço confirmado. Revise variante, frete e estoque antes de publicar. Nesta fase, a publicação permanece manual.</p><div aria-live="polite" class="hint" id="manualPublishStatus">Aguardando seleção de produto.</div><form hidden="" id="manualPublishForm"><input id="manualId" type="hidden"/><div class="grid two"><label>Nome do produto<input id="manualNome" maxlength="250" required=""/></label><label>Categoria<input id="manualCategoria" maxlength="120" required=""/></label><label>Preço observado / custo confirmado (R$)<input id="manualCusto" min="0.01" placeholder="Confira o valor no fornecedor" required="" step="0.01" type="number"/></label><label>Markup divisor — margem (%)<input id="markupMargem" max="80" min="0" required="" step="0.1" type="number" value="30"/></label><button class="ghost" id="markupSalvar" type="button">Salvar margem padrão</button><label>Preço de venda (R$)<input id="manualPreco" max="10000000" min="0.01" placeholder="Informe o preço verificado" readonly="" required="" step="0.01" type="number"/></label><label>Estoque confirmado<input id="manualEstoque" min="0" placeholder="Quantidade verificada" required="" step="1" type="number"/></label></div><label style="margin-top:10px">Descrição (opcional)<textarea id="manualDescricao" maxlength="2000"></textarea></label><p class="hint" id="manualFotos"></p><label class="checkbox"><input id="manualPrecoConfirmado" required="" type="checkbox"/> Conferi o custo atual, a moeda e a variante no fornecedor.</label><label class="checkbox"><input id="manualFreteConfirmado" required="" type="checkbox"/> Conferi frete, taxas aplicáveis e viabilidade da venda.</label><label class="checkbox" style="margin-top:10px"><input id="manualConfirmado" required="" type="checkbox"/> Conferi as imagens, o preço e a disponibilidade deste produto. Autorizo a publicação manual para teste.</label><div class="actions"><button class="primary" id="manualPublicar" type="submit">Publicar este produto na vitrine</button><button class="ghost" id="manualCancelar" type="button">Cancelar</button></div></form></section><div class="actions"><button class="ghost" id="bulkPrev" type="button">← Anterior</button><button class="ghost" id="bulkNext" type="button">Próxima →</button></div><div class="scroll"><table><thead><tr><th>Fornecedor</th><th>URL do produto</th><th>URL das imagens</th><th>URL do vídeo</th><th>Status</th><th>Situação / Ações</th><th>Atualização</th></tr></thead><tbody id="bulkRows"></tbody></table></div></section>
+</section>
+
+ <p class="foot">Uti Like · Central Cronjob. As integrações de produção continuam vinculadas aos serviços e permissões existentes; esta atualização reorganiza somente a interface.</p>
+</main>
+<!-- A barra do Cronjob controla a mesma tabela dentro do iframe de reprecificação. -->
+<div class="cj-horizontal-dock" id="cjRepricingScrollDock" role="group" aria-label="Rolagem horizontal da reprecificação CJ" hidden>
+ <button class="cj-dock-arrow" type="button" id="cjRepriceScrollLeft" aria-label="Ver colunas à esquerda">&#x2039;</button>
+ <div class="cj-dock-slider-wrap"><span class="cj-dock-label">Colunas da Reprecificação CJ · arraste ou deslize</span>
+  <input class="cj-dock-range" id="cjRepriceScrollRange" type="range" min="0" max="1000" step="1" value="0" aria-label="Mover tabela horizontalmente" />
+ </div>
+ <button class="cj-dock-arrow" type="button" id="cjRepriceScrollRight" aria-label="Ver colunas à direita">&#x203a;</button>
+</div>
+
+<script>
+(()=>{'use strict';
+  const tabs=[...document.querySelectorAll('.module-tab')];
+  const sections=new Map(tabs.map(button=>[button.dataset.module,document.getElementById('painel-'+button.dataset.module)]));
+  const first=tabs[0]?.dataset.module;
+  function activate(name,writeHash=false){
+    if(!sections.has(name)) name=first;
+    for(const b of tabs){
+      const selected=b.dataset.module===name;
+      b.classList.toggle('active',selected);
+      b.setAttribute('aria-selected',selected?'true':'false');
+      b.tabIndex=selected?0:-1;
+      sections.get(b.dataset.module).hidden=!selected;
+    }
+    if(name==='reprecificacao-cj'){const frame=document.getElementById('cjRepricingFrame');if(frame && !frame.getAttribute('src'))frame.setAttribute('src',frame.dataset.src);}
+    if(name==='integracao-cj'){
+      const frame=document.getElementById('cjIntegrationFrame');
+      if(frame && !frame.getAttribute('src')) frame.setAttribute('src',frame.dataset.src);
+    }
+    if(writeHash && location.hash!=='#'+name){
+      history.replaceState(null,'','#'+name);
+    }
+  }
+  tabs.forEach((b,index)=>{
+    b.addEventListener('click',()=>activate(b.dataset.module,true));
+    b.addEventListener('keydown',e=>{
+      if(!['ArrowRight','ArrowLeft','Home','End'].includes(e.key))return;
+      e.preventDefault();
+      const current=tabs.indexOf(b);
+      const next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(current+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+      tabs[next].focus();activate(tabs[next].dataset.module,true);
+    });
+  });
+  const requested=decodeURIComponent(location.hash.slice(1));
+  activate(sections.has(requested)?requested:first,false);
+  // O link acima é exclusivamente uma rota HTML de MESMA ORIGEM.
+  // Esta abertura permite ao navegador copiar a sessionStorage inicial para
+  // a nova aba (necessária à autenticação existente). A página de destino
+  // remove window.opener imediatamente. Nenhuma credencial vai pela URL.
+  // Os atalhos da página CJ incorporada devem sair do iframe, sem abrir
+  // outra instância do Cronjob dentro da própria Central.
+  const cjFrame=document.getElementById('cjIntegrationFrame');
+  cjFrame?.addEventListener('load',()=>{
+    try {
+      for(const link of cjFrame.contentDocument.querySelectorAll('header a[href="cronjob.html"], header a[href="index.html"]')) link.target='_top';
+    } catch (_) { /* link de página inteira permanece disponível */ }
+  });
+  window.addEventListener('hashchange',()=>{const hash=decodeURIComponent(location.hash.slice(1));if(sections.has(hash))activate(hash,false)});
+})();
+</script>
+<script defer="" src="bulk-queue.js"></script>
+<script defer="" src="publicacao-manual.js"></script>
+<script defer="" src="automacao-cronjob.js"></script>
+<script>
+(function(){
+ const labels={frete:'Frete embutido (R$)',reserva:'Reserva de segurança (%)',taxaPagamento:'Taxa de pagamento (%)',tributos:'Tributos estimados (%)',reservaAfiliados:'Reserva para afiliados (%)',despesaFixa:'Despesa fixa (R$)',protecao:'Proteção contra oscilação (%)'};
+ const keys=Object.keys(labels),fields=document.getElementById('pricingFields'),msg=document.getElementById('pricingMessage'),status=document.getElementById('pricingStatus');
+ for(const k of keys){const label=document.createElement('label');label.textContent=labels[k];const input=document.createElement('input');input.type='number';input.step='0.01';input.min='0';input.id='price_'+k;label.append(input);fields.append(label)}
+ function auth(){return 'cookie'}
+ async function api(path,options={}){const r=await fetch('/api/admin/precificacao'+path,{...options,headers:{Authorization:'Bearer '+auth(),'Content-Type':'application/json'},cache:'no-store'});const j=await r.json();if(!r.ok)throw Error(j.erro||'Falha HTTP '+r.status);return j}
+ async function load(){try{const c=await api('/config');for(const k of keys)document.getElementById('price_'+k).value=c[k];msg.textContent='Regras carregadas do Neon.'}catch(e){msg.textContent=e.message}}
+ document.getElementById('pricingSave').onclick=async()=>{try{const b={};for(const k of keys){const v=document.getElementById('price_'+k).value;if(v==='')throw Error('Preencha '+labels[k]);b[k]=Number(v)}await api('/config',{method:'PUT',body:JSON.stringify(b)});msg.textContent='Regras persistidas no Neon. Clique em Recalcular catálogo para atualizar a vitrine.'}catch(e){msg.textContent=e.message}};
+ document.getElementById('pricingRecalc').onclick=async()=>{if(!confirm('Recalcular os preços de todos os produtos com custo válido?'))return;try{const x=await api('/recalcular',{method:'POST'});msg.textContent=x.mensagem;poll()}catch(e){msg.textContent=e.message}};
+ async function poll(){try{const s=await api('/status');status.textContent=[s.mensagem,'Alterados: '+(s.alterados||0),'Ignorados: '+(s.ignorados||0),'Erros: '+(s.erros||0)].join(' · ');if(s.executando)setTimeout(poll,2500)}catch(e){status.textContent=e.message}}
+ load();
+})();
+</script>
+<script>
+// Etapa 7.1: somente painel CJ, não modifica o Cronjob da Garimpagem.
+(()=>{'use strict';
+ const botao=document.getElementById('cjSincronizarPtbr');
+ const versao=document.getElementById('cjVersaoPtbr');
+ const resultado=document.getElementById('cjResultadoPtbr');
+ function token(){return 'cookie'}
+ async function cj(path,method='GET'){
+   const t=token();if(!t)throw Error('Faça login como administrador na vitrine, nesta aba.');
+   const resposta=await fetch('/api/admin/cj'+path,{method,headers:{Authorization:'Bearer '+t},cache:'no-store'});
+   const dados=await resposta.json().catch(()=>({}));
+   if(!resposta.ok)throw Error(dados.erro||('HTTP '+resposta.status+' — confira o deploy da Etapa 7'));
+   return dados;
+ }
+ cj('/integracao/versao').then(v=>{
+  versao.textContent=v.portaoPtbr&&v.sincronizacaoManual?'Backend Etapa '+v.versao+' confirmado: proteção PT-BR ativa.':'ATENÇÃO: proteção PT-BR não confirmada neste backend.';
+ }).catch(e=>{versao.textContent='Backend Etapa 7.1 não confirmado: '+e.message});
+ botao.addEventListener('click',async()=>{
+  botao.disabled=true;resultado.textContent='Sincronizando aprovados...';
+  try{const d=await cj('/sincronizar-aprovados','POST');resultado.textContent=`Concluído: ${d.publicados} produtos CJ elegíveis; ${d.adicionados} novos; ${d.removidos} anúncios antigos removidos.`;}
+  catch(e){resultado.textContent='Não foi possível confirmar a sincronização: '+e.message;}
+  finally{botao.disabled=false}
+ });
+})();
+</script>
+<script>
+/* Apenas acessibilidade: a barra fixa acompanha o scroll da tabela no iframe. */
+(()=>{
+ 'use strict';
+ const frame=document.getElementById('cjRepricingFrame');
+ const dock=document.getElementById('cjRepricingScrollDock');
+ const range=document.getElementById('cjRepriceScrollRange');
+ const tab=document.getElementById('painel-reprecificacao-cj');
+ if(!frame||!dock||!range||!tab)return;
+ const STATE='UTILIKE_CJ_REPRICE_SCROLL_STATE';
+ const ACK='UTILIKE_CJ_REPRICE_SCROLL_ACK';
+ const REQUEST='UTILIKE_CJ_REPRICE_SCROLL_REQUEST';
+ const SET='UTILIKE_CJ_REPRICE_SCROLL_SET';
+ const STEP='UTILIKE_CJ_REPRICE_SCROLL_STEP';
+ let lastState=null;
+ function active(){return !tab.hidden;}
+ function send(type,payload={}){
+  if(!frame.getAttribute('src')||!frame.contentWindow)return;
+  frame.contentWindow.postMessage({type,...payload},location.origin);
+ }
+ function refresh(){
+  const d=lastState;
+  const show=active()&&d&&d.width-d.viewport>2;
+  dock.hidden=!show;
+  document.body.classList.toggle('cj-repricing-bar-visible',!!show);
+  if(!show)return;
+  const max=Math.max(0,d.width-d.viewport);
+  range.value=max?String(Math.round(Math.min(max,Math.max(0,d.left))/max*1000)):'0';
+  range.style.setProperty('--cj-thumb-size',Math.round(Math.max(34,Math.min(130,d.viewport/Math.max(d.width,1)*125)))+'px');
+  range.setAttribute('aria-valuetext',max?Math.round(d.left/max*100)+'% da rolagem horizontal':'Tabela inteira visível');
+ }
+ window.addEventListener('message',event=>{
+  if(event.source!==frame.contentWindow||event.origin!==location.origin)return;
+  const data=event.data||{};
+  if(data.type!==STATE)return;
+  lastState={viewport:Number(data.viewport)||0,width:Number(data.width)||0,left:Number(data.left)||0};
+  send(ACK);
+  refresh();
+ });
+ range.addEventListener('input',()=>send(SET,{ratio:Number(range.value)/1000}));
+ document.getElementById('cjRepriceScrollLeft').addEventListener('click',()=>send(STEP,{direction:-1}));
+ document.getElementById('cjRepriceScrollRight').addEventListener('click',()=>send(STEP,{direction:1}));
+ frame.addEventListener('load',()=>{lastState=null;refresh();send(REQUEST);});
+ // A aba do Cronjob muda sem recarregar a página.
+ const obs=new MutationObserver(()=>{refresh();if(active())send(REQUEST);});
+ obs.observe(tab,{attributes:true,attributeFilter:['hidden']});
+ window.addEventListener('resize',()=>{refresh();if(active())send(REQUEST);});
+ if(active())send(REQUEST);
+})();
+</script>
+</body>
+</html>

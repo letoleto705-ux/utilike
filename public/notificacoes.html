@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#072c69"><title>Notificações e campanhas | Administração Uti Like</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+<style>
+:root{color-scheme:light;--blue:#0758b8;--navy:#07285e;--orange:#ff8620;--border:#dce7f3;--muted:#5d728e;--bg:#f4f8fe}*{box-sizing:border-box}body{margin:0;background:var(--bg);font:14px Inter,Arial,sans-serif;color:#142d50}button,input,select,textarea{font:inherit}button{cursor:pointer}a{color:inherit;text-decoration:none}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #ff9020;outline-offset:2px}.hidden{display:none!important}
+.admin-top{background:linear-gradient(110deg,#041b47,#083f83 68%,#0a6ab7);padding:15px max(18px,calc((100vw - 1300px)/2));display:flex;align-items:center;justify-content:space-between;gap:10px;color:#fff;position:sticky;top:0;z-index:4;box-shadow:0 6px 25px #062b651a}
+.brand{display:flex;align-items:center;gap:12px;font-weight:900;font-size:17px}.uk{background:#104a91;border:1px solid #ffffff35;border-radius:11px;color:white;padding:11px;font-size:20px;letter-spacing:-2px}.uk b{color:var(--orange)}.brand small{display:block;color:#c2ddf8;font-size:10px;font-weight:550;margin-top:3px}.admin-top a.link{font-size:12px;border:1px solid #ffffff5a;border-radius:10px;padding:10px;background:#ffffff1e}
+.page{max-width:1320px;margin:0 auto;padding:23px 20px 55px}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.11em;color:#0b6ac1;font-weight:850;margin-bottom:7px}.page h1{font-size:clamp(24px,3vw,34px);letter-spacing:-.04em;line-height:1.15;margin:0 0 7px}.sub{color:#61758c;line-height:1.6;margin:0 0 22px;max-width:800px}.banner{background:#fff5e7;border:1px solid #ffd6a3;border-left:5px solid #ff9c20;padding:14px 18px;border-radius:13px;margin:13px 0 22px;line-height:1.55;color:#754918}.grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(290px,.75fr);gap:18px}.panel{background:#fff;border:1px solid var(--border);border-radius:16px;padding:22px;box-shadow:0 9px 25px #092d6108;min-width:0}.panel h2{margin:0 0 5px;font-size:18px;letter-spacing:-.02em}.hint{font-size:11px;color:var(--muted);line-height:1.5}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.field{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:750;margin-top:16px}.field.full{grid-column:1/-1}.field input,.field select,.field textarea{border:1px solid #cbdced;background:#f9fcff;color:#102b4e;padding:12px;border-radius:10px;width:100%;min-width:0}.field textarea{min-height:110px;resize:vertical}.field small{font-size:10px;font-weight:500;color:#627a95}.buttons{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}.btn{border:0;background:#084d9b;color:#fff;font-weight:800;border-radius:10px;padding:11px 15px}.btn:hover{filter:brightness(.94)}.btn.secondary{background:#e7f3ff;color:#0b4d9d}.btn.outline{background:white;color:#073e86;border:1px solid #cce0f6}.btn:disabled{opacity:.48;cursor:not-allowed}.preview{border-radius:16px;padding:15px;background:linear-gradient(145deg,#d8e8fc,#fafcff);border:1px solid #c4dbf2;margin-top:15px}.preview-header{color:#537291;font-size:11px;font-weight:850;margin-bottom:10px}.preview-bubble{display:flex;gap:11px;border-radius:18px;padding:15px;background:white;box-shadow:0 10px 22px #092f7218;min-width:0}.preview-icon{width:43px;height:43px;flex:0 0 43px;background:#073f89;color:#fff;display:grid;place-items:center;border-radius:13px;font-size:17px;font-weight:900}.preview-icon span{color:#ff8f24}.preview-message{overflow-wrap:anywhere;min-width:0}.preview-message strong{display:block;font-size:12px;margin-bottom:4px}.preview-message p{font-size:12px;line-height:1.4;margin:0;color:#425873}.status{color:#076147;background:#e9f9ef;border:1px solid #cbeedd;display:inline-block;padding:5px 9px;border-radius:99px;font-size:10px;font-weight:850}.drafts{margin-top:19px}.draft-item{border:1px solid #e3edf8;border-radius:12px;padding:13px;margin-top:9px;background:#fafdff}.draft-item strong{font-size:12px;display:block}.draft-item p{font-size:11px;color:#61758c;margin:6px 0;line-height:1.5}.draft-actions{display:flex;gap:6px;flex-wrap:wrap}.draft-actions button{font-size:11px;padding:6px 9px;border-radius:8px;border:1px solid #c9dcef;background:#fff;color:#0a4c91;font-weight:750}.muted-box{border:1px dashed #d5e3f2;border-radius:12px;padding:17px;font-size:12px;color:#65768b;text-align:center;margin-top:12px}.meta-list{margin-top:19px;display:grid;gap:8px}.meta-list div{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #edf2f8;padding-bottom:8px;font-size:12px}.meta-list strong{color:#063c83}.blocker{padding:13px 15px;background:#f1f6ff;color:#365c89;border-radius:10px;border:1px solid #d6e5fb;margin:18px 0;font-size:12px;line-height:1.65}.admin-gate{max-width:640px;margin:8vh auto;background:white;border:1px solid var(--border);border-radius:18px;padding:32px;text-align:center;box-shadow:0 15px 45px #0632600e}.admin-gate h1{font-size:22px}.admin-gate p{line-height:1.6;color:#5d7491}.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.notice{padding:10px 12px;border-radius:9px;background:#e9f9ef;color:#126344;font-size:12px;margin-top:14px;line-height:1.6}.notice.error{background:#fff3eb;color:#a34e17}@media(max-width:900px){.grid{grid-template-columns:1fr}.page{padding:18px 12px 45px}}@media(max-width:480px){.panel{padding:15px}.form-grid{grid-template-columns:1fr}.admin-top{padding:11px 13px}.admin-top .link{font-size:10px}.brand{font-size:14px}.uk{padding:8px}.field{margin-top:13px}}
+</style><style>.uk-campaign-row{border:1px solid #e5ecf5;padding:12px;margin:8px 0;border-radius:11px;display:flex;justify-content:space-between;align-items:center;gap:10px}.uk-campaign-row strong{display:block;font-size:12px}.uk-campaign-row small{display:block;font-size:10px;color:#66788d;margin-top:5px}.uk-campaign-row button{border:1px solid #bdcede;border-radius:8px;background:#edf6ff;color:#0a438b;padding:7px;margin:3px;cursor:pointer}.overlay.hidden{display:none!important}@media(max-width:620px){.uk-campaign-row{flex-direction:column;align-items:flex-start}}</style></head>
+<body>
+<header class="admin-top"><a href="index.html" class="brand"><span class="uk">U<span style="color:#ff8e20">K</span></span><span>Uti Like<small>Central de Administração</small></span></a><a class="link" href="admin.html">← Administração</a></header>
+<div id="gate" class="admin-gate hidden"><h1>Acesso da Administração</h1><p>Entre na Uti Like com uma conta administradora para visualizar este painel. Esta página só permite visualizar o painel administrativo após login. Campanhas públicas podem ser salvas no Neon; os rascunhos push permanecem locais.</p><a href="index.html" class="btn" style="display:inline-block">Ir para a vitrine</a></div>
+<main class="page hidden" id="adminContent">
+ <div class="eyebrow">Administração / Comunicações</div><h1>Notificações e campanhas</h1><p class="sub">Planeje a duração e a frequência de campanhas, prepare notificações e administre os pop-ups da vitrine Uti Like.</p>
+ <div class="banner"><strong>Notificações push externas ainda não estão ativadas.</strong> O editor abaixo salva somente rascunhos neste navegador, incluindo início, fim e frequência desejada. Ele não envia notificações a celulares. Já o formulário de pop-up promocional mais abaixo utiliza o Neon existente e respeita automaticamente a janela de início e fim na vitrine.</div>
+ <div class="grid">
+  <section class="panel" aria-label="Editor de campanha">
+   <h2>Compor campanha</h2><div class="hint">Mensagens claras, preços reais e chamadas para ação sem promessas não confirmadas.</div>
+   <form id="campaignForm">
+    <div class="form-grid">
+     <label class="field">Nome interno da campanha<input name="campaignName" id="campaignName" maxlength="80" placeholder="Ex.: Novidades da semana" required></label>
+     <label class="field">Canal pretendido<select name="channel" id="channel"><option value="email">E-mail promocional (Gmail)</option><option value="push">Push do site / PWA</option></select></label>
+     <label class="field">Público pretendido<select name="audience" id="audience"><option value="consentidos">Clientes que aceitaram marketing</option><option value="push-inscritos">Inscritos no Web Push</option></select></label>
+     <label class="field">Início planejado da campanha<input id="schedule" type="datetime-local" required><small>Data e hora em que a campanha deverá começar quando o push for integrado.</small></label>
+     <label class="field">Fim planejado da campanha<input id="scheduleEnd" type="datetime-local" required><small>Após esse momento, os futuros envios deverão ser interrompidos pelo servidor.</small></label>
+     <label class="field">Frequência de notificações (planejada)<select id="frequencyHours" name="frequencyHours">
+       <option value="1">A cada 1 hora</option><option value="2" selected>A cada 2 horas</option><option value="3">A cada 3 horas</option><option value="4">A cada 4 horas</option><option value="5">A cada 5 horas</option><option value="6">A cada 6 horas</option><option value="8">A cada 8 horas</option><option value="12">A cada 12 horas</option><option value="24">A cada 24 horas</option>
+     </select><small>Frequência escolhida pelo administrador; ainda não agenda disparos reais. Futuramente deverá respeitar consentimento e limites de contato.</small></label>
+     <label class="field full">Assunto / título da notificação<input name="title" id="campaignTitle" maxlength="75" placeholder="✨ Confira as novidades Uti Like" required></label>
+     <label class="field full">Mensagem curta<textarea name="body" id="campaignBody" maxlength="260" placeholder="Explore produtos selecionados e confira preços e detalhes atualizados na nossa vitrine." required></textarea><small id="charCount">0 de 260 caracteres</small></label>
+     <label class="field full">Destino do clique<input id="destination" type="url" placeholder="https://utilike.onrender.com/produto.html?id=..."><small>Opcional. Informe uma URL HTTPS da Uti Like para a futura campanha.</small></label>
+    </div>
+    <div class="buttons"><button type="button" class="btn secondary" id="generate">✨ Sugerir a partir do catálogo</button><button type="submit" class="btn" id="save">Salvar rascunho</button><button type="button" class="btn outline" id="clear">Novo rascunho</button></div>
+   </form><div id="feedback" role="status" aria-live="polite"></div>
+   <div class="blocker"><strong>Frequência e encerramento:</strong> você pode planejar quando começar, quando terminar e o intervalo entre notificações. Esses dados ficam em rascunhos locais. Para entregar notificações mesmo com o telefone bloqueado, será necessária integração posterior com Web Push, permissões do cliente, service worker e execução no servidor. <strong>Não existe um robô de disparos ativo nesta página.</strong></div>
+  </section>
+  <aside class="panel" aria-label="Prévia e rascunhos">
+   <h2>Visualização da mensagem</h2><p class="hint">Prévia ilustrativa; a aparência final depende do Gmail ou navegador do cliente.</p>
+   <div class="preview"><div class="preview-header">Notificação Uti Like · Prévia</div><div class="preview-bubble"><div class="preview-icon">U<span>K</span></div><div class="preview-message"><strong id="previewTitle">Novidades Uti Like</strong><p id="previewBody">Crie uma campanha para ver sua mensagem aqui.</p></div></div></div>
+   <div class="meta-list"><div><span>Envios externos</span><strong>Não integrados</strong></div><div><span>Inscrições reais</span><strong>Não conectadas</strong></div><div><span>Rascunhos locais</span><strong id="draftCount">0</strong></div></div>
+   <div class="drafts"><h2>Rascunhos neste navegador</h2><div id="draftList" class="muted-box">Nenhum rascunho salvo até o momento.</div></div>
+  </aside>
+ </div>
+ <details class="panel" style="margin-top:18px"><summary style="font-weight:800;cursor:pointer">Próxima etapa técnica: ativação segura no servidor</summary><p class="hint">Para que o agendamento de notificações funcione com o navegador fechado ou a tela bloqueada, será necessário conectar a API Node/Express a Web Push, assinaturas consentidas, service worker, agendamento no servidor e logs de envio, respeitando LGPD e preferências dos clientes. Esta página não consegue disparar notificações de fundo apenas com HTML.</p></details>
+
+<section class="panel" id="ukVitrineCampaignAdmin" style="margin-top:18px"><h2>Pop-up Promocional da Vitrine — Uti Like</h2><p class="hint">Campanhas públicas são salvas no Neon. Você pode definir início e fim: após o fim, a API pública deixa automaticamente de exibir a campanha, ainda que seu cadastro permaneça no banco. Novas campanhas ficam desativadas por padrão.</p>
+ <form id="ukCampaignForm"><div class="form-grid">
+ <label class="field">Nome interno<input name="nome" maxlength="100" required placeholder="Ex.: Campanha novembro"></label>
+ <label class="field">Local de exibição<select name="tipo"><option value="popup">Pop-up Promocional da Vitrine</option><option value="aviso">Aviso público</option><option value="banner">Banner (reserva para gestão futura)</option></select></label>
+ <label class="field full">Título da campanha<input name="titulo" maxlength="150" required placeholder="Confira as novidades Uti Like"></label>
+ <label class="field full">Mensagem<textarea name="mensagem" maxlength="1000" placeholder="Texto claro da campanha, sem descontos inventados."></textarea></label>
+ <label class="field full">Imagem (opcional: URL HTTPS ou /assets/... )<input name="imagemUrl" maxlength="500" placeholder="https://... ou /assets/banner.webp"></label>
+ <label class="field">Destino do botão<input name="destino" value="/index.html" maxlength="400" required></label>
+ <label class="field">Texto do botão<input name="botaoTexto" value="Ver produtos" maxlength="60"></label>
+ <label class="field">Início da campanha (opcional)<input name="inicioEm" type="datetime-local"><small>Quando preenchido, só será exibida a partir deste momento.</small></label>
+ <label class="field">Encerramento automático (opcional)<input name="fimEm" type="datetime-local"><small>Após esta data e hora, a campanha não aparece mais para o público.</small></label>
+ <label class="field">Quando reexibir o pop-up?
+  <select id="ukReexibirModo" name="reexibirModo"><option value="intervalo" selected>Depois de um intervalo de horas</option><option value="recarregar">Ao entrar ou recarregar a página (requer atualização do script da vitrine)</option></select>
+  <small>O modo por horário já funciona. A exibição a cada recarregamento exige também atualizar a rotina pública de pop-up; este arquivo HTML sozinho não consegue ativá-la.</small>
+ </label>
+ <label class="field" id="ukReexibirIntervalo">Reexibir após quantas horas?<input name="intervaloHoras" type="number" min="1" max="720" step="1" value="24" required><small>É o intervalo mínimo entre uma exibição e outra para cada visitante, mesmo após recarregar a página.</small></label>
+ <div class="field full hidden" id="ukRecarregarAviso" role="status" style="border:1px solid #ffd19b;background:#fff8ee;border-radius:11px;padding:12px;color:#824b0d"><strong>Modo ainda não disponível no site publicado.</strong> Para exibir em todo recarregamento, também será preciso adaptar `vitrine-extras-uk.js` e a API, pois o servidor atual só permite intervalos de 1 a 720 horas. Este formulário impedirá salvar um modo que ainda não funciona.</div>
+ <label class="field">Prioridade<input name="prioridade" type="number" min="-100" max="100" value="0"><small>Na API atual, campanhas com número maior aparecem primeiro. Ex.: 3 antes de 2 e 1.</small></label>
+ <label class="field full"><span><input name="ativo" type="checkbox" style="width:auto"> Ativar esta campanha após salvar</span></label>
+ </div><div class="buttons"><button class="btn" type="submit">Salvar campanha no Neon</button><button class="btn secondary" type="button" id="ukCampaignPreview">Visualizar prévia</button></div></form><div id="ukCampMessage" role="status" class="hint"></div>
+ <h3 style="margin-top:28px">Campanhas cadastradas</h3><div id="ukCampaignList" class="hint">Consultando...</div>
+</section>
+<section class="panel" id="ukUserMessaging" style="margin-top:18px"><h2>Mensagem ao Usuário</h2><p class="hint">Registre uma mensagem individual na central de notificações do cliente. Não é chat em tempo real e não dispara e-mail ou Web Push.</p>
+<form id="ukMessageForm"><div class="form-grid">
+<label class="field">Usuário do cliente<input name="usuario" maxlength="30" placeholder="Usuário cadastrado" required></label>
+<label class="field">Categoria<select name="tipo"><option value="mensagem">Mensagem</option><option value="aviso">Aviso</option><option value="promocao">Promoção</option></select></label>
+<label class="field full">Título<input name="titulo" maxlength="150" required></label>
+<label class="field full">Mensagem<textarea name="corpo" maxlength="1500" required></textarea></label>
+</div><div class="buttons"><button class="btn" type="submit">Registrar mensagem para o cliente</button></div></form><div id="ukUserMessage" role="status" class="hint"></div>
+</section>
+<div id="ukPreviewDialog" class="overlay hidden" style="position:fixed;inset:0;z-index:99;background:#061a40bc;display:flex;align-items:center;justify-content:center;padding:16px"><div class="panel" style="width:min(100%,420px);background:white"><div style="display:flex;align-items:center;justify-content:space-between"><strong>Prévia do Pop-up Promocional da Vitrine</strong><button class="btn secondary" type="button" id="ukPreviewClose">✕</button></div><div id="ukPreviewCard" style="background:linear-gradient(110deg,#09295e,#0959b1);color:white;padding:25px;border-radius:13px;margin-top:17px"></div><p class="hint">Prévia ilustrativa. Nada será publicado por esta ação.</p></div></div>
+</main>
+<script src="vitrine-uk.js"></script>
+<script>
+'use strict';
+(async()=>{await UK.ready;
+const $=id=>document.getElementById(id), KEY='utilike_admin_notificacoes_rascunhos_v1';
+let admin=null,drafts=[],editingId=null, productCandidate=null;
+if(UK.auth()?.user?.perfil==='admin')admin=UK.auth().user;
+$('gate').classList.toggle('hidden',!!admin);$('adminContent').classList.toggle('hidden',!admin);
+// Uma verificação de perfil no HTML é somente conveniência de interface. A segurança real exige backend.
+if(admin){
+ try{const arr=JSON.parse(localStorage.getItem(KEY)||'[]');if(Array.isArray(arr))drafts=arr.filter(x=>x&&typeof x.id==='string').slice(0,80)}catch{}
+ const now=Date.now();
+ const safeText=v=>String(v??'').slice(0,1500);
+ const preview=()=>{$('previewTitle').textContent=$('campaignTitle').value.trim()||'Novidades Uti Like';$('previewBody').textContent=$('campaignBody').value.trim()||'Crie uma campanha para ver sua mensagem aqui.';$('charCount').textContent=$('campaignBody').value.length+' de 260 caracteres';};
+ ['campaignTitle','campaignBody'].forEach(id=>$(id).addEventListener('input',preview));
+ function message(msg,error=false){$('feedback').className='notice'+(error?' error':'');$('feedback').textContent=msg;}
+ function persist(){try{localStorage.setItem(KEY,JSON.stringify(drafts));return true}catch{message('Não foi possível salvar rascunhos neste navegador.',true);return false}}
+ function renderList(){
+  $('draftCount').textContent=String(drafts.length);
+  const wrap=$('draftList');wrap.replaceChildren();wrap.className=drafts.length?'':'muted-box';
+  if(!drafts.length){wrap.textContent='Nenhum rascunho salvo até o momento.';return}
+  for(const row of [...drafts].reverse()){
+   const item=document.createElement('div');item.className='draft-item';
+   const strong=document.createElement('strong');strong.textContent=safeText(row.name);
+   const p=document.createElement('p');
+   const start=row.schedule||'';const end=row.scheduleEnd||'';
+   const when=end&&Date.parse(end)<Date.now()?'Prazo planejado encerrado':start&&Date.parse(start)>Date.now()?'Início futuro':'Em janela planejada';
+   p.textContent=safeText(row.title)+' · '+(row.channel==='push'?'Push':'E-mail')+' · '+when+' · '+(row.frequencyHours||2)+'h entre envios · Somente rascunho local';
+   const buttons=document.createElement('div');buttons.className='draft-actions';
+   const edit=document.createElement('button');edit.type='button';edit.textContent='Editar';edit.onclick=()=>{
+    editingId=row.id;$('campaignName').value=row.name;$('channel').value=row.channel;$('audience').value=row.audience;$('schedule').value=row.schedule||'';$('scheduleEnd').value=row.scheduleEnd||'';$('frequencyHours').value=String(row.frequencyHours||2);$('campaignTitle').value=row.title;$('campaignBody').value=row.body;$('destination').value=row.destination;preview();window.scrollTo({top:0,behavior:'smooth'});message('Rascunho carregado para edição.');
+   };
+   const del=document.createElement('button');del.type='button';del.textContent='Excluir';del.onclick=()=>{if(!confirm('Excluir este rascunho somente deste navegador?'))return;drafts=drafts.filter(d=>d.id!==row.id);persist();renderList();message('Rascunho excluído. Nenhum cliente recebeu mensagens.');};
+   buttons.append(edit,del);item.append(strong,p,buttons);wrap.appendChild(item);
+  }
+ }
+ $('campaignForm').addEventListener('submit',e=>{
+  e.preventDefault();const destination=$('destination').value.trim();
+  if(destination){try{const u=new URL(destination);if(u.protocol!=='https:'||!(u.hostname==='utilike.onrender.com'||u.hostname.endsWith('.utilike.com.br')||u.hostname==='utilike.com.br')){throw Error('domínio')} }catch{message('Use um endereço HTTPS da Uti Like (utilike.onrender.com ou domínio oficial configurado).',true);return}}
+  const start=$('schedule').value,end=$('scheduleEnd').value,frequencyHours=Number($('frequencyHours').value);
+  if(!start||!end||!Number.isFinite(Date.parse(start))||!Number.isFinite(Date.parse(end))||Date.parse(end)<=Date.parse(start)){message('Defina início e fim válidos. O encerramento precisa ser posterior ao início.',true);return}
+  if(!Number.isInteger(frequencyHours)||frequencyHours<1||frequencyHours>24){message('Escolha um intervalo válido.',true);return}
+  const rec={id:editingId||('r'+Date.now()+'_'+Math.random().toString(36).slice(2,7)),name:$('campaignName').value.trim(),channel:$('channel').value,audience:$('audience').value,schedule:start,scheduleEnd:end,frequencyHours,title:$('campaignTitle').value.trim(),body:$('campaignBody').value.trim(),destination,updatedAt:new Date().toISOString(),status:'rascunho'};
+  if(!rec.name||!rec.title||!rec.body){message('Preencha nome, título e mensagem.',true);return}
+  if(editingId){drafts=drafts.map(d=>d.id===editingId?rec:d)}else drafts.push(rec);
+  drafts=drafts.slice(-80);if(persist()){renderList();message('Rascunho salvo apenas neste navegador. Nenhum envio foi programado ou realizado.');editingId=rec.id;}
+ });
+ $('clear').onclick=()=>{$('campaignForm').reset();editingId=null;preview();message('Novo rascunho.');};
+ $('generate').onclick=async()=>{
+  const btn=$('generate');btn.disabled=true;message('Consultando produtos reais da vitrine...');
+  try{
+   const resp=await fetch('/api/produtos',{cache:'no-store'});if(!resp.ok)throw Error('A API de produtos não está acessível.');const list=await resp.json();
+   if(!Array.isArray(list))throw Error('A API não retornou lista de produtos.');
+   const p=list.find(p=>(p.ativo!==false&&p.active!==false)&&String(p.nome||p.name||'').trim()&&Number(p.precoPor??p.preco??p.price??0)>0);
+   if(!p)throw Error('Não há produtos ativos com preço válido para gerar uma sugestão.');
+   const name=String(p.nome||p.name).trim().replace(/\s+/g,' ').slice(0,64);
+   const price=Number(p.precoPor??p.preco??p.price).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+   $('campaignName').value='Destaque: '+name.slice(0,53);
+   $('campaignTitle').value=('✨ Descubra na Uti Like: '+name).slice(0,75);
+   $('campaignBody').value=(`${name}. Preço exibido no catálogo: ${price}. Confira detalhes, disponibilidade e condições diretamente na Uti Like.`).slice(0,260);
+   $('destination').value='https://utilike.onrender.com/produto.html?id='+encodeURIComponent(String(p.id||''));
+   preview();message('Sugestão criada com dados do catálogo. Confira o preço e o produto antes de salvar; nenhum envio foi feito.');
+  }catch(err){message(err.message||'Não foi possível gerar a sugestão.',true)}finally{btn.disabled=false}
+ };
+ preview();renderList();
+}
+})();
+</script><script src="vitrine-admin-uk.js"></script>
+<script>
+// Complemento limitado ao editor administrativo; não altera a vitrine pública.
+(()=>{
+ 'use strict';
+ const form=document.getElementById('ukCampaignForm');
+ const modo=document.getElementById('ukReexibirModo');
+ const field=document.getElementById('ukReexibirIntervalo');
+ const alert=document.getElementById('ukRecarregarAviso');
+ const notice=document.getElementById('ukCampMessage');
+ if(!form||!modo||!field||!alert)return;
+ const change=()=>{const reload=modo.value==='recarregar';field.classList.toggle('hidden',reload);alert.classList.toggle('hidden',!reload);field.querySelector('input').required=!reload;};
+ modo.addEventListener('change',change);change();
+ form.addEventListener('submit',e=>{
+   if(modo.value==='recarregar'){
+     e.preventDefault();e.stopImmediatePropagation();
+     notice.textContent='A opção “ao recarregar” ainda não pode ser salva: o script público da vitrine e a API também precisam aceitar este modo. Nenhuma campanha foi gravada por esta tentativa.';
+     notice.style.color='#a34e17';return;
+   }
+   const start=form.elements.inicioEm.value,end=form.elements.fimEm.value;
+   if(start&&end&&new Date(end)<=new Date(start)){
+     e.preventDefault();e.stopImmediatePropagation();notice.textContent='O encerramento da campanha deve ser posterior ao início.';notice.style.color='#a34e17';
+   }
+ },true);
+})();
+</script></body></html>

@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Uti Like | Reprecificação CJ</title>
+<script>
+// Ao abrir a partir do Cronjob, o navegador já copiou o sessionStorage.
+// Desvincular a janela de origem imediatamente impede controle reverso da aba.
+try { if (window.opener) window.opener = null; } catch (_) { /* sem ação */ }
+</script>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#172e4d;background:#f4f7fc}
+*{box-sizing:border-box}body{margin:0;padding:23px 22px 32px}
+button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}
+header{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:19px;flex-wrap:wrap}
+.kicker{font-size:11px;font-weight:900;letter-spacing:.13em;color:#1c60a8;text-transform:uppercase}
+h1{font-size:clamp(22px,3vw,28px);letter-spacing:-.6px;margin:4px 0 4px}p{margin:0;line-height:1.5}.sub{font-size:13px;color:#65748c}
+.tag{border:1px solid #c6dcf3;border-radius:30px;color:#194c82;background:#eef7ff;padding:7px 11px;font-weight:750;font-size:12px}
+.card{background:#fff;border:1px solid #dfe8f3;border-radius:15px;box-shadow:0 2px 12px #1534560b;padding:17px;margin-bottom:13px}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.metric{background:#f3f7fe;padding:14px;border-radius:11px;border:1px solid #e3ecfa}
+.metric-label{font-size:12px;color:#667894;font-weight:700;margin-bottom:7px}.metric-number{font-size:25px;font-weight:850;color:#173861;font-variant-numeric:tabular-nums}
+.metric.red .metric-number{color:#b33632}.metric.orange .metric-number{color:#9c660e}.metric.green .metric-number{color:#157345}
+.grid{display:grid;grid-template-columns:1.2fr .75fr;gap:13px}
+.row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.spread{justify-content:space-between}
+h2{font-size:16px;margin:0 0 9px;font-weight:820}label{font-size:12px;font-weight:760;color:#364c67;display:grid;gap:6px}
+input,select{width:100%;padding:10px 11px;border:1px solid #cddaea;background:#fff;border-radius:9px;color:#183858}
+input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid #6daae2;outline-offset:2px}
+input[type=checkbox]{width:17px;height:17px;accent-color:#1665b6}label.check{display:flex;align-items:center;gap:9px;font-size:13px;color:#263e60}
+button{border:1px solid transparent;border-radius:9px;padding:10px 14px;font-size:13px;font-weight:800;min-height:42px}
+button.primary{color:white;background:#195fbb}button.primary:hover{background:#0d4d99}button.green{color:white;background:#137b49}button.green:hover{background:#11643d}
+button.light{background:#edf4fc;color:#1b4e87;border-color:#d3e3f4}button.light:hover{background:#dfefff}button.danger{background:#fff0ed;color:#b33d32;border-color:#edcac7}button.danger:hover{background:#ffe3e0}
+button.small{padding:6px 9px;min-height:31px;font-size:12px}
+.schedule{display:grid;grid-template-columns:1fr 190px auto;align-items:end;gap:12px}.schedule .check{min-height:44px}
+.manual-batch{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin-top:14px;padding:12px;background:#f4f8fe;border:1px solid #deebf9;border-radius:11px}
+.manual-batch .count{width:175px;max-width:100%}.manual-batch .check{min-height:42px}.manual-hint{color:#607690;font-size:12px;line-height:1.5;margin-top:8px}
+.notice{background:#fffaf0;border:1px solid #f2dfac;padding:11px 13px;border-radius:10px;font-size:12px;color:#735b24;line-height:1.5;margin-top:10px}
+.status{margin:12px 0;color:#1f537e;font-size:12px;min-height:20px;line-height:1.5;white-space:pre-wrap}
+.status.error{color:#b43232}
+hr{height:1px;border:0;background:#e4ebf5;margin:14px 0}
+.table-wrap{width:100%;overflow-x:auto;border:1px solid #dfe7f2;border-radius:11px}
+table{width:100%;min-width:1170px;border-collapse:collapse;table-layout:fixed}
+th{font-size:11px;color:#405d7d;background:#f0f5fd;letter-spacing:.015em;text-align:left;font-weight:850;padding:13px 10px;border-bottom:1px solid #dfe8f5}
+td{padding:12px 10px;border-bottom:1px solid #eef2f7;font-size:12px;vertical-align:middle}tbody tr:hover{background:#fbfdff}
+th:nth-child(1){width:250px}th:nth-child(2){width:155px}th:nth-child(3),th:nth-child(4){width:104px}th:nth-child(5){width:120px}th:nth-child(6),th:nth-child(7){width:114px}th:nth-child(8){width:120px}th:nth-child(9){width:133px}
+.product{display:flex;gap:10px;align-items:center}.product img{width:62px;height:62px;object-fit:contain;display:block;background:#f0f5fc;border:1px solid #e5edf6;border-radius:8px;flex:none}.prod-name{font-weight:780;line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+a.cjlink{display:inline-block;font-size:11px;margin-top:4px;color:#2469a4;text-decoration:underline}
+.muted{font-size:11px;color:#73839a}.money{font-variant-numeric:tabular-nums;font-weight:780;white-space:nowrap}
+.money.red{color:#b43534}.money.green{color:#11784f}.money.yellow{color:#97640d}
+.margin{max-width:104px;padding:7px 8px}.pill{display:inline-block;padding:5px 8px;border-radius:8px;font-size:11px;font-weight:830;max-width:130px}
+.pill.good{color:#157347;background:#eaf7f0}.pill.warn{color:#916007;background:#fff4da}.pill.risk{color:#b03837;background:#fcebea}.pill.unknown{color:#65758c;background:#edf1f6}.variant-inline{margin-top:7px}.review-reason{display:block;margin-top:5px;font-size:11px;line-height:1.35;color:#73572a;overflow-wrap:anywhere}
+.actions{display:flex;gap:5px}.actions button{padding:7px 9px;min-height:32px}
+.toolbar{display:flex;justify-content:space-between;gap:9px;flex-wrap:wrap;align-items:end;margin:10px 0}
+.toolbar input{max-width:270px}.pager{display:flex;gap:7px;align-items:center;justify-content:flex-end;margin-top:12px}
+dialog.history{border:1px solid #cad9e9;border-radius:16px;padding:22px;width:min(530px,calc(100vw - 35px));color:#1c3452;box-shadow:0 20px 60px #10284640}dialog.history::backdrop{background:#101d31a1}.history-list{white-space:pre-wrap;font-size:12px;line-height:1.8;padding:10px 0;max-height:52vh;overflow:auto}.counters{font-size:12px;color:#61728e}.variant-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.variant-grid img{width:100%;max-height:185px;object-fit:contain;background:#f4f7fc;border-radius:9px}.variant-grid .sub{word-wrap:break-word}@media(max-width:560px){.variant-grid{grid-template-columns:1fr}}footer{font-size:11px;color:#6b7d98;margin:20px 5px}
+@media(max-width:850px){body{padding:13px 11px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.schedule{grid-template-columns:1fr 180px auto}}
+@media(max-width:530px){.schedule{grid-template-columns:1fr 1fr}.schedule button{grid-column:1/-1}.metrics{gap:7px}.metric{padding:11px}.metric-number{font-size:23px}.tag{font-size:11px}.card{padding:13px}}
+
+/* Acessibilidade: controle horizontal fixo, também utilizável por toque no celular. */
+body{padding-bottom:calc(100px + env(safe-area-inset-bottom, 0px))}
+.cj-horizontal-dock{position:fixed;z-index:1200;left:12px;right:12px;bottom:max(8px,env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid #b9d0e8;border-radius:14px;background:#f8fbff;box-shadow:0 6px 26px #102e5160;color:#204366}
+.cj-horizontal-dock[hidden]{display:none!important}
+.cj-dock-slider-wrap{min-width:0;flex:1;display:grid;gap:3px}
+.cj-dock-label{font-size:11px;font-weight:800;line-height:1.2;color:#235586}
+.cj-dock-arrow{flex:none;display:grid;place-items:center;width:39px;height:39px;min-height:39px;padding:0;border:1px solid #bbd0e9;border-radius:10px;background:#e6f1ff;color:#1a5794;font-size:24px;line-height:1}
+.cj-dock-arrow:active{background:#cfe4ff}
+.cj-dock-range{appearance:none;-webkit-appearance:none;width:100%;margin:0;height:26px;padding:0;border:0!important;background:transparent!important;touch-action:pan-x;cursor:ew-resize}
+.cj-dock-range::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:#c8daf0;border:1px solid #abc5e4}
+.cj-dock-range::-moz-range-track{height:8px;border-radius:999px;background:#c8daf0;border:1px solid #abc5e4}
+.cj-dock-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:var(--cj-thumb-size, 56px);height:23px;margin-top:-8px;background:#1764ab;border:2px solid white;border-radius:11px;box-shadow:0 1px 5px #0a32645c;cursor:grab}
+.cj-dock-range::-moz-range-thumb{width:var(--cj-thumb-size, 56px);height:21px;background:#1764ab;border:2px solid white;border-radius:11px;box-shadow:0 1px 5px #0a32645c;cursor:grab}
+.cj-dock-range:active::-webkit-slider-thumb{cursor:grabbing}
+.cj-dock-range:focus-visible{outline:3px solid #6daae2;outline-offset:3px}
+@media(max-width:600px){.cj-horizontal-dock{left:5px;right:5px;bottom:max(5px,env(safe-area-inset-bottom,0px));gap:6px;padding:7px;border-radius:11px}.cj-dock-label{font-size:10px}.cj-dock-arrow{width:36px;height:40px}.cj-dock-range{height:31px}}
+</style>
+</head>
+<body>
+<header>
+ <div><div class="kicker">Uti Like · Fornecedores · CJ Dropshipping</div><h1>Reprecificação CJ</h1>
+ <p class="sub">Custos atualizados e margem individual dos produtos CJ já publicados na vitrine.</p></div>
+ <span class="tag">Fornecedor exclusivo: CJ</span>
+</header>
+<section class="card">
+ <div class="metrics">
+  <div class="metric"><div class="metric-label">Produtos CJ publicados</div><div class="metric-number" id="mTotal">—</div></div>
+  <div class="metric green"><div class="metric-label">Com custo consultado</div><div class="metric-number" id="mConsultados">—</div></div>
+  <div class="metric red"><div class="metric-label">Custo acima da venda</div><div class="metric-number" id="mRisco">—</div></div>
+  <div class="metric orange"><div class="metric-label">Custo aumentou</div><div class="metric-number" id="mAumento">—</div></div>
+ </div>
+</section>
+<div class="grid">
+ <section class="card">
+  <h2>Consultar custos atuais da vitrine</h2>
+  <p class="sub">Lê o catálogo publicado no Neon e consulta a variante exata de cada produto na API CJ. Não importa produtos novos e não atualiza a vitrine sem seu ✓.</p>
+  <div class="manual-batch">
+   <label class="count" for="quantidadeConsulta">Quantos produtos consultar agora?
+    <input type="number" id="quantidadeConsulta" min="1" max="100000" step="1" value="5" inputmode="numeric" />
+   </label>
+   <label class="check"><input type="checkbox" id="consultarTodos" /> Consultar todos os produtos</label>
+  </div>
+  <p class="manual-hint" id="previsaoConsulta">Lote de teste: 5 produtos · até aproximadamente 50 pontos CJ.</p>
+  <div class="row" style="margin-top:12px"><button type="button" class="primary" id="consultar">⌕ Consultar 5 produtos</button><button type="button" class="light" id="atualizar">↻ Atualizar resultados</button></div>
+  <div id="progresso" class="status" role="status" aria-live="polite">Clique para carregar produtos publicados.</div>
+  <div class="notice"><strong>Segurança:</strong> produtos sem variante CJ identificada ou sem custo válido ficam para revisão. Nenhum produto é reprecificado automaticamente.</div>
+ </section>
+ <section class="card">
+  <h2>Monitoramento automático</h2>
+  <p class="sub">O servidor consulta custos em intervalos definidos pelo administrador. A publicação permanece manual.</p>
+  <div class="schedule" style="margin-top:13px">
+   <label class="check"><input type="checkbox" id="auto"/> Ativar</label>
+   <label>Intervalo<select id="intervalo"><option value="1">1 hora</option><option value="2">2 horas</option><option value="3">3 horas</option><option value="4">4 horas</option><option value="5">5 horas</option><option value="6">6 horas</option><option value="24">24 horas</option></select></label>
+   <button type="button" class="green" id="salvarAgenda">Salvar</button>
+  </div>
+  <div class="status" id="agendaStatus">Agendamento a consultar.</div>
+  <p class="muted">A execução depende do serviço Render estar ativo. Há proteção do consumo diário de pontos da CJ.</p>
+ </section>
+</div>
+<section class="card">
+ <div class="row spread"><div><h2>Produtos CJ publicados</h2><p class="sub">Cada produto mantém sua própria margem. Edite a margem e veja a sugestão antes de aprovar.</p></div><span class="tag" id="cambio">Câmbio: consulte para atualizar</span></div>
+ <div class="toolbar">
+  <label>Localizar produto na lista<input type="search" id="buscar" placeholder="Nome ou identificador CJ" autocomplete="off"/></label>
+  <label style="max-width:230px">Exibir<select id="modoListagem"><option value="lote">Último lote consultado</option><option value="catalogo">Catálogo CJ completo</option></select></label>
+  <div class="counters" id="resultCount">Aguardando produtos do Neon.</div>
+ </div>
+ <div class="table-wrap"><table><thead><tr>
+  <th>Produto / link CJ</th><th>Estoque / frete</th><th>Custo USD</th><th>Custo BRL</th><th>Margem individual</th><th>Preço atual</th><th>Preço sugerido</th><th>Situação</th><th>Republicar?</th>
+ </tr></thead><tbody id="linhas"><tr><td colspan="9" class="muted">Carregando produtos CJ do Neon...</td></tr></tbody></table></div>
+ <div class="pager"><button class="light small" id="prev">← Anterior</button><span class="counters" id="paginas">Página 1</span><button class="light small" id="next">Próxima →</button></div>
+ <div id="resultado" class="status" role="status" aria-live="polite"></div>
+</section>
+<dialog class="history" id="variantesDialog" aria-labelledby="varianteTitulo">
+ <h2 id="varianteTitulo">Identificar variante CJ</h2>
+ <p class="sub" id="varianteAjuda">Compare SKU, opções e imagens antes de selecionar a variante.</p>
+ <div class="variant-grid" style="margin-top:12px">
+  <div><label>Imagem publicada</label><img id="imagemAtualVariante" alt="Imagem atual na Uti Like"></div>
+  <div><label>Imagem da variante CJ</label><img id="imagemCJVariante" alt="Imagem da variante da CJ"></div>
+ </div>
+ <label style="margin-top:12px">Variante<select id="listaVariantes"></select></label>
+ <p class="status" id="detalheVariante" aria-live="polite"></p>
+ <div class="row" style="justify-content:flex-end"><button class="light" id="cancelarVariante" type="button">Cancelar</button>
+ <button class="green" id="confirmarVariante" type="button">Confirmar variante (sem publicar)</button></div>
+</dialog>
+<dialog class="history" id="historicoDialog" aria-labelledby="historicoTitulo"><h2 id="historicoTitulo">Histórico da reprecificação</h2><div class="history-list" id="historicoTexto">Carregando...</div><div class="row spread"><span class="muted">Apenas decisões registradas no Neon.</span><button class="light" type="button" id="historicoFechar">Fechar</button></div></dialog>
+<!-- Barra horizontal sempre acessível; a tabela e seus dados permanecem intactos. -->
+<div class="cj-horizontal-dock" id="cjHorizontalDock" role="group" aria-label="Deslocamento horizontal da tabela de reprecificação" hidden>
+ <button class="cj-dock-arrow" type="button" id="cjScrollLeft" aria-label="Ver colunas à esquerda">&#x2039;</button>
+ <div class="cj-dock-slider-wrap"><span class="cj-dock-label">Colunas da tabela · arraste ou deslize</span>
+  <input class="cj-dock-range" id="cjScrollRange" type="range" min="0" max="1000" value="0" step="1" aria-label="Rolagem horizontal da tabela de produtos" />
+ </div>
+ <button class="cj-dock-arrow" type="button" id="cjScrollRight" aria-label="Ver colunas à direita">&#x203a;</button>
+</div>
+<footer>Reprecificação CJ · O preço definitivo utiliza o cálculo divisor da Precificação Central (frete embutido, taxas e reservas). Mudanças aprovadas são registradas no Neon com histórico; pedidos antigos não são alterados.</footer>
+<script>
+(()=>{'use strict';
+ const root='/api/admin/cj/reprecificacao';
+ const $=id=>document.getElementById(id);
+ const brl=n=>Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+ const usd=n=>Number(n).toLocaleString('pt-BR',{style:'currency',currency:'USD'});
+ let pagina=1,paginas=1,loading=false,items=[],cfg=null,searchTimer=null,variantesAtuais=[],idParaVariante=null,modoInicialDefinido=false;
+ $('modoListagem').value='catalogo';
+ const token=()=> 'cookie';
+ async function api(url,{method='GET',body}={}){
+   const t=token();if(!t)throw Error('Sessão administrativa ausente nesta aba. Faça login na Administração e use o botão Abrir reprecificação CJ em página inteira no Cronjob.');
+   const response=await fetch(url,{method,cache:'no-store',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+   const data=await response.json().catch(()=>({}));if(!response.ok){if(response.status===401||response.status===403)throw Error('A sessão expirou ou sua conta não tem permissão administrativa. Entre novamente na Administração e reabra pelo Cronjob.');throw Error(data.erro||'HTTP '+response.status)}return data;
+ }
+ function status(s,error=false){$('resultado').textContent=s;$('resultado').classList.toggle('error',error)}
+ function dom(tag,cls,text){const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el}
+ function pctNum(s){if(String(s).trim()==='')return null;const n=Number(s);return Number.isFinite(n)&&n>=0&&n<100?n:null}
+ function suggest(cost,margin){if(!cfg||cost==null||margin==null)return null;
+   const extras=['reserva','taxaPagamento','tributos','reservaAfiliados','protecao'].reduce((a,k)=>a+Number(cfg[k]||0),0);
+   if(margin+extras>=100)return null;
+   const val=(Number(cost)+Number(cfg.frete||0)+Number(cfg.despesaFixa||0))/(1-(margin+extras)/100);
+   return Number.isFinite(val)&&val>0?Math.ceil((val-1e-9)*100)/100:null;
+ }
+ function signal(p){
+  if(p.status==='aplicado')return ['good','Publicado'];
+  if(p.status==='rejeitado')return ['unknown','Rejeitado'];
+  if(p.status!=='ok')return ['unknown',p.status==='revisao'?'Revisar variante':p.status==='erro'?'Erro CJ':'Aguardando consulta'];
+  const floor=suggest(p.custoBRL,0);
+  if(floor!==null&&floor>=p.precoAtual-.005)return ['risk','Preço em risco'];
+  if(p.custoAnterior>0&&p.custoBRL>p.custoAnterior+.005)return ['warn','Custo aumentou'];
+  return ['good','Custo monitorado'];
+ }
+ function textCell(row,text,cl){const cell=dom('td',cl||'');cell.textContent=text;row.append(cell);return cell}
+ function render(){const t=$('linhas');t.replaceChildren();
+  if(!items.length){const tr=dom('tr');const td=textCell(tr,'Nenhum produto CJ encontrado nesta página.','muted');td.colSpan=9;t.append(tr);return}
+  for(const p of items){const tr=dom('tr');const td=dom('td');const prod=dom('div','product');
+   const img=dom('img');img.alt='';img.loading='lazy';if(/^https:\/\//i.test(p.imagem||''))img.src=p.imagem;
+   const inf=dom('div');inf.append(dom('div','prod-name',p.nome));
+   inf.append(dom('div','muted','CJ: '+p.pid));
+   // Em produtos históricos sem VID, a ação de resolver a variante fica visível
+   // ao lado da miniatura, sem exigir rolagem horizontal até a última coluna.
+   if(p.status==='revisao'&&/variantes?/i.test(p.erro||'')){
+     const resolve=dom('button','light small variant-inline','Selecionar variante CJ');
+     resolve.type='button';resolve.addEventListener('click',()=>abrirVariantes(p));inf.append(resolve);
+   }
+   if(p.urlCJ){const a=dom('a','cjlink','Abrir produto na CJ');a.href=p.urlCJ;a.target='_blank';a.rel='noopener noreferrer';inf.append(a)}
+   else inf.append(dom('div','muted','Link CJ não informado pela API'));
+   prod.append(img,inf);td.append(prod);tr.append(td);
+   textCell(tr,p.estoqueInfo||'Não informado','muted');
+   textCell(tr,p.custoUSD==null?'—':usd(p.custoUSD),'money');
+   textCell(tr,p.custoBRL==null?'—':brl(p.custoBRL),'money');
+   const marginTD=dom('td');const margin=dom('input','margin');margin.type='number';margin.min='0';margin.max='99.99';margin.step='0.01';margin.title='Margem individual do produto (%)';margin.setAttribute('aria-label','Margem em porcentagem: '+p.nome);
+   margin.value=p.margem==null?'0':String(p.margem);margin.disabled=p.status!=='ok';marginTD.append(margin);tr.append(marginTD);
+   const oldTD=textCell(tr,p.precoAtual==null?'—':brl(p.precoAtual),'money');
+   const suggestedTD=textCell(tr,'—','money green');const sigTD=dom('td');const sig=dom('span');sigTD.append(sig);tr.append(sigTD);
+   const acts=dom('td','actions');const choose=dom('button','light small','Variante');choose.type='button';choose.title='Conferir opções de variante CJ, sem alterar preço';choose.disabled=!!p.vid&&p.status==='aplicado';
+   const approve=dom('button','green small','✓');approve.type='button';approve.title='Aprovar preço sugerido';approve.setAttribute('aria-label','Aprovar preço de '+p.nome);
+   const reject=dom('button','danger small','✕');reject.type='button';reject.title='Rejeitar proposta';reject.setAttribute('aria-label','Rejeitar proposta de '+p.nome);
+   const audit=dom('button','light small','◷');audit.type='button';audit.title='Ver histórico de preços';audit.setAttribute('aria-label','Histórico de '+p.nome);acts.append(choose,approve,reject,audit);tr.append(acts);
+   choose.addEventListener('click',()=>abrirVariantes(p));
+   function recalc(){const n=pctNum(margin.value);const calc=suggest(p.custoBRL,n);
+    suggestedTD.textContent=calc==null?'—':brl(calc);
+    suggestedTD.className='money '+(calc!=null&&p.precoAtual!=null&&calc<p.precoAtual-.005?'yellow':'green');
+    const [typ,label]=signal(p);sig.className='pill '+typ;sig.textContent=label;sig.title=p.erro||'';
+    const existingReason=sigTD.querySelector('.review-reason');if(existingReason)existingReason.remove();
+    if((p.status==='revisao'||p.status==='erro')&&p.erro){const reason=dom('small','review-reason',p.erro);sigTD.append(reason)}
+    if(typ==='risk')oldTD.classList.add('red');
+    approve.disabled=p.status!=='ok'||calc===null;
+    reject.disabled=p.status==='aguardando';
+    return calc;
+   }
+   margin.addEventListener('input',recalc);
+   margin.addEventListener('change',async()=>{
+     if(p.status!=='ok')return;const n=pctNum(margin.value);if(n==null){status('Margem inválida no produto '+p.nome,true);return}
+     try{const v=await api(root+'/margem/'+encodeURIComponent(p.id),{method:'POST',body:{margem:n}});p.margem=v.margem;status('Margem salva para '+p.nome+'. Preço ainda não publicado.');recalc()}
+     catch(e){status(e.message,true)}
+   });
+   approve.addEventListener('click',async()=>{
+     const n=pctNum(margin.value),newPrice=recalc();if(n==null||newPrice==null)return;
+     if(!confirm('Atualizar somente este produto CJ?\n\n'+p.nome+'\nPreço atual: '+brl(p.precoAtual)+'\nNovo preço: '+brl(newPrice)+'\nMargem: '+n+'%\n\nA mudança será gravada no Neon.'))return;
+     approve.disabled=true;try{const v=await api(root+'/decidir/'+encodeURIComponent(p.id),{method:'POST',body:{decisao:'aprovar',margem:n}});status(v.mensagem);await load()}catch(e){status(e.message,true);recalc()}
+   });
+   reject.addEventListener('click',async()=>{
+     if(!confirm('Rejeitar a proposta deste produto CJ sem alterar o preço atual?'))return;
+     reject.disabled=true;try{const v=await api(root+'/decidir/'+encodeURIComponent(p.id),{method:'POST',body:{decisao:'rejeitar'}});status(v.mensagem);await load()}catch(e){status(e.message,true);recalc()}
+   });
+   audit.addEventListener('click',async()=>{try{const h=await api(root+'/historico/'+encodeURIComponent(p.id));
+      $('historicoTitulo').textContent='Histórico · '+p.nome;
+      $('historicoTexto').textContent=h.itens.length?h.itens.map(x=>{const date=new Date(x.registrado_em).toLocaleString('pt-BR');
+        const old=x.preco_anterior==null?'—':brl(x.preco_anterior);const now=x.preco_novo==null?'—':brl(x.preco_novo);
+        return date+' | '+x.acao+'\n'+old+' → '+now+' · custo '+(x.custo_brl==null?'—':brl(x.custo_brl));}).join('\n\n'):'Nenhuma decisão registrada para este produto.';
+      $('historicoDialog').showModal();
+     }catch(e){status(e.message,true)}});
+   recalc();t.append(tr);
+  }
+ }
+ async function load(){try{const q=new URLSearchParams({pagina:String(pagina),tamanho:'25',busca:$('buscar').value.trim(),modo:$('modoListagem').value});
+    const data=await api(root+'/produtos?'+q);pagina=data.pagina;paginas=data.paginas;items=data.itens;
+    const s=data.estatisticas; $('mTotal').textContent=s.total;$('mConsultados').textContent=s.consultados;$('mRisco').textContent=s.risco;$('mAumento').textContent=s.alterados;
+    atualizarPrevisao();
+    $('paginas').textContent='Página '+pagina+' de '+paginas;
+    $('prev').disabled=pagina<=1;$('next').disabled=pagina>=paginas;
+    $('resultCount').textContent=data.totalFiltrado+($('modoListagem').value==='lote'?' consultado(s) no último lote':' produto(s) no catálogo')+' · até 25 por página';
+    const rate=items.find(x=>x.cambio!=null);
+    $('cambio').textContent=rate?'Câmbio da última consulta: USD 1 = '+brl(rate.cambio):'Câmbio: consulte para atualizar';
+    render();
+   }catch(e){$('linhas').replaceChildren();const tr=dom('tr'),td=textCell(tr,e.message,'muted');td.colSpan=9;$('linhas').append(tr);status(e.message,true)}
+ }
+ function selecionado(){
+   if($('consultarTodos').checked)return 'todos';
+   const valor=$('quantidadeConsulta').value.trim();
+   const n=Number(valor);return valor&&Number.isSafeInteger(n)&&n>=1&&n<=100000?n:null;
+ }
+ function atualizarPrevisao(){
+   const todos=$('consultarTodos').checked,quant=selecionado(),total=Number($('mTotal').textContent)||0;
+   $('quantidadeConsulta').disabled=todos;
+   const count=quant==='todos'?total:quant==null?null:total?Math.min(quant,total):quant;
+   $('consultar').textContent=quant==='todos'?'⌕ Consultar todos os produtos':quant==null?'⌕ Informe uma quantidade':'⌕ Consultar '+quant+' produto(s)';
+   $('previsaoConsulta').textContent=count==null?'Informe um número inteiro entre 1 e 100000.':
+     (todos?'Consulta completa: ':'Consulta em lote: ')+count+' produto(s) · consumo estimado de até '+(count*10)+' pontos CJ. '+
+     'Lotes seguintes continuam do próximo produto; os preços só mudam após aprovação.';
+ }
+ async function refreshStatus(){try{const d=await api(root+'/status');const s=d.execucao,a=d.agenda;
+   if(!modoInicialDefinido){
+     modoInicialDefinido=true;
+     if(s.inicio&&s.verificados>0){$('modoListagem').value='lote';pagina=1;load();}
+   }
+   $('auto').checked=a.ativo;$('intervalo').value=String(a.intervaloHoras);
+   $('agendaStatus').textContent=(a.ativo?'Ligado':'Desligado')+(a.proximaExecucao?' · Próxima consulta: '+new Date(a.proximaExecucao).toLocaleString('pt-BR'):'')+
+    ' · Consumo estimado hoje: '+d.pontosEstimadosHoje+'/'+d.limitePontosDiario+' pontos CJ (reserva desta rotina)';
+   $('progresso').textContent=s.mensagem+' · '+s.verificados+'/'+s.total+' consultados · '+s.atualizados+' com preço confirmado · '+s.revisar+' revisar · '+s.erros+' erros'+
+     (s.revisar>0?'\nProdutos em revisão não tiveram preço confirmado. Use o botão Variante na última coluna para conferir a opção correta da CJ antes de precificar.':'');
+   $('consultar').disabled=!!s.executando;
+   $('quantidadeConsulta').disabled=!!s.executando||$('consultarTodos').checked;
+   $('consultarTodos').disabled=!!s.executando;
+   if(s.executando){if(!loading){loading=true;setTimeout(loop,4500)}}else loading=false;
+  }catch(e){$('progresso').textContent=e.message;}
+ }
+ async function loop(){if(!loading)return;await refreshStatus();await load();if(loading)setTimeout(loop,4500)}
+ async function abrirVariantes(p){
+   idParaVariante=p.id;variantesAtuais=[];
+   $('varianteTitulo').textContent='Selecionar variante · '+p.nome;
+   $('varianteAjuda').textContent='O sistema não identificou uma variante única. Compare as opções da CJ com o produto publicado. Sua escolha NÃO modifica o preço da vitrine.';
+   $('imagemAtualVariante').removeAttribute('src');$('imagemCJVariante').removeAttribute('src');
+   if(/^https:\/\//i.test(p.imagem||''))$('imagemAtualVariante').src=p.imagem;
+   $('listaVariantes').replaceChildren();$('detalheVariante').textContent='Consultando variantes da CJ...';
+   $('confirmarVariante').disabled=true;$('variantesDialog').showModal();
+   try{const v=await api(root+'/variantes/'+encodeURIComponent(p.id));
+     if(idParaVariante!==p.id)return;
+     variantesAtuais=v.variantes;
+     for(const x of variantesAtuais){const opt=document.createElement('option');opt.value=x.vid;
+       opt.textContent=(x.opcoes||x.nome||'Variante')+' · SKU '+(x.sku||'não informado')+' · '+(x.precoUSD==null?'preço pendente':usd(x.precoUSD));
+       $('listaVariantes').append(opt);
+     }
+     $('listaVariantes').value=p.vid&&variantesAtuais.some(x=>x.vid===p.vid)?p.vid:variantesAtuais[0]?.vid||'';
+     atualizarVariante();
+     if(!variantesAtuais.length)$('detalheVariante').textContent='Nenhuma variante CJ encontrada para este produto.';
+   }catch(e){$('detalheVariante').textContent='Não foi possível consultar variantes: '+e.message;}
+ }
+ function atualizarVariante(){const v=variantesAtuais.find(x=>x.vid===$('listaVariantes').value);
+   $('imagemCJVariante').removeAttribute('src');
+   if(v&&/^https:\/\//i.test(v.imagem||''))$('imagemCJVariante').src=v.imagem;
+   $('detalheVariante').textContent=v?'Código: '+v.vid+' · SKU: '+(v.sku||'não informado')+' · Opções: '+(v.opcoes||'não informado')+' · Custo USD: '+(v.precoUSD==null?'indisponível':usd(v.precoUSD)):'';
+   $('confirmarVariante').disabled=!v||v.precoUSD==null;
+ }
+ $('listaVariantes').addEventListener('change',atualizarVariante);
+ $('cancelarVariante').onclick=()=>$('variantesDialog').close();
+ $('confirmarVariante').onclick=async()=>{
+   const v=variantesAtuais.find(x=>x.vid===$('listaVariantes').value);if(!v||!idParaVariante)return;
+   if(!confirm('Confirmar esta variante CJ para consultar o custo?\n'+v.vid+'\nSKU: '+v.sku+'\nNenhum preço será publicado automaticamente.'))return;
+   $('confirmarVariante').disabled=true;
+   try{const resp=await api(root+'/selecionar-variante/'+encodeURIComponent(idParaVariante),{method:'POST',body:{vid:v.vid}});
+     $('variantesDialog').close();status(resp.mensagem);await load();
+   }catch(e){$('detalheVariante').textContent='Falha: '+e.message;atualizarVariante();}
+ };
+ $('historicoFechar').onclick=()=>$('historicoDialog').close();
+ $('quantidadeConsulta').addEventListener('input',atualizarPrevisao);
+ $('consultarTodos').addEventListener('change',atualizarPrevisao);
+ $('consultar').addEventListener('click',async()=>{
+   const quantidade=selecionado();
+   if(quantidade===null){status('Informe uma quantidade inteira entre 1 e 100000, ou marque Consultar todos.',true);return;}
+   const total=Number($('mTotal').textContent)||0;
+   const alvo=quantidade==='todos'?total:Math.min(quantidade,total||quantidade);
+   if(!confirm('Consultar o custo de '+(quantidade==='todos'?'TODOS os '+total:alvo)+' produto(s) CJ?\n\nConsumo estimado: até '+alvo*10+' pontos CJ. O limite diário do módulo pode interromper a consulta.\n\nNão haverá alteração automática dos preços da vitrine.'))return;
+   try{const v=await api(root+'/consultar',{method:'POST',body:{quantidade}});$('modoListagem').value='lote';pagina=1;$('progresso').textContent=v.mensagem;await refreshStatus()}
+   catch(e){status(e.message,true)}
+ });
+ $('atualizar').onclick=async()=>{await Promise.all([load(),refreshStatus()])};
+ $('salvarAgenda').onclick=async()=>{try{const b={ativo:$('auto').checked,intervaloHoras:Number($('intervalo').value)};
+  const v=await api(root+'/agendamento',{method:'PUT',body:b});status(v.mensagem);await refreshStatus()}
+  catch(e){status(e.message,true)}};
+ $('modoListagem').addEventListener('change',()=>{pagina=1;load()});
+ $('prev').onclick=()=>{if(pagina>1){pagina--;load()}};
+ $('next').onclick=()=>{if(pagina<paginas){pagina++;load()}};
+ $('buscar').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{pagina=1;load()},350)});
+ atualizarPrevisao();
+ Promise.all([api('/api/admin/precificacao/config').then(x=>{cfg=x}),load(),refreshStatus()]).then(()=>{render()}).catch(e=>status(e.message,true));
+})();
+</script>
+<script>
+/* Apenas acessibilidade: sincroniza controle fixo e scroll horizontal existente. */
+(()=>{
+ 'use strict';
+ const tableScroll=document.querySelector('.table-wrap');
+ const dock=document.getElementById('cjHorizontalDock');
+ const range=document.getElementById('cjScrollRange');
+ if(!tableScroll||!dock||!range)return;
+ const insideFrame=window.parent!==window;
+ const LEFT='UTILIKE_CJ_REPRICE_SCROLL_LEFT';
+ const STATE='UTILIKE_CJ_REPRICE_SCROLL_STATE';
+ const ACK='UTILIKE_CJ_REPRICE_SCROLL_ACK';
+ const REQUEST='UTILIKE_CJ_REPRICE_SCROLL_REQUEST';
+ const SET='UTILIKE_CJ_REPRICE_SCROLL_SET';
+ const STEP='UTILIKE_CJ_REPRICE_SCROLL_STEP';
+ let dockManagedByParent=false;
+ function dimensions(){
+  const viewport=tableScroll.clientWidth;
+  const width=tableScroll.scrollWidth;
+  const max=Math.max(0,width-viewport);
+  return {viewport,width,max,left:Math.max(0,Math.min(max,tableScroll.scrollLeft))};
+ }
+ function notifyParent(state){
+  if(!insideFrame||!/^https?:$/.test(location.protocol))return;
+  window.parent.postMessage({type:STATE,viewport:state.viewport,width:state.width,left:state.left},location.origin);
+ }
+ function sync(){
+  const d=dimensions();
+  dock.hidden=d.max<2||dockManagedByParent;
+  range.value=d.max?String(Math.round(d.left/d.max*1000)):'0';
+  range.style.setProperty('--cj-thumb-size',Math.round(Math.max(34,Math.min(130,d.viewport/Math.max(d.width,1)*125)))+'px');
+  range.setAttribute('aria-valuetext',d.max?Math.round(d.left/d.max*100)+'% da rolagem horizontal':'Tabela inteira visível');
+  notifyParent(d);
+ }
+ function setRatio(ratio){const d=dimensions();tableScroll.scrollLeft=d.max*Math.min(1,Math.max(0,Number(ratio)||0));sync();}
+ function step(direction){const d=dimensions();tableScroll.scrollLeft+=direction*Math.max(110,Math.round(d.viewport*.65));sync();}
+ range.addEventListener('input',()=>setRatio(Number(range.value)/1000));
+ document.getElementById('cjScrollLeft').addEventListener('click',()=>step(-1));
+ document.getElementById('cjScrollRight').addEventListener('click',()=>step(1));
+ tableScroll.addEventListener('scroll',sync,{passive:true});
+ window.addEventListener('resize',sync,{passive:true});
+ if(typeof ResizeObserver==='function')new ResizeObserver(sync).observe(tableScroll);
+ window.addEventListener('message',event=>{
+  if(!insideFrame||event.source!==window.parent||event.origin!==location.origin)return;
+  const data=event.data||{};
+  if(data.type===ACK&&!dockManagedByParent){dockManagedByParent=true;sync();}
+  if(data.type===REQUEST)sync();
+  if(data.type===SET)setRatio(data.ratio);
+  if(data.type===STEP)step(data.direction===-1?-1:1);
+ });
+ requestAnimationFrame(sync);
+ window.addEventListener('load',sync);
+})();
+</script>
+</body>
+</html>

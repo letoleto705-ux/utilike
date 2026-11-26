@@ -1,0 +1,13 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Área do Afiliado | Uti Like</title><link rel="stylesheet" href="uk-portao.css"></head><body>
+<header><a class="brand" href="index.html">Uti <span>Like</span></a><nav><a href="index.html">Vitrine</a><a href="carrinho.html">Carrinho UK</a><a href="minha-conta.html">Minha conta</a><a id="adminLink" href="gerencia-afiliados.html" hidden>Gerência de Afiliados</a></nav></header>
+<main><section class="hero"><h1>Área do Afiliado Uti Like</h1><p id="welcome">Sua loja, seus links e sua rede de indicados.</p></section><p id="feedback" class="status" role="status">Consultando seu perfil...</p>
+<div id="dashboard" class="grid" hidden>
+<section class="card full"><h2>Meus links de divulgação</h2><p class="muted">Link da loja para indicar compras e link separado para convidar afiliados. Cada produto também pode ser compartilhado com sua identificação comercial.</p>
+<label>1. Minha vitrine / minhas vendas<div class="links"><input id="vendaLink" readonly><button data-copy="vendaLink">Copiar</button></div></label>
+<label>2. Convite para minha rede<div class="links"><input id="conviteLink" readonly><button data-copy="conviteLink">Copiar</button></div></label>
+<label>3. Link de um produto específico<div class="links"><input id="productId" placeholder="ID do produto na vitrine"><button id="makeProductLink">Gerar</button></div><div class="links"><input id="productLink" readonly><button data-copy="productLink">Copiar</button></div></label>
+</section>
+<section class="card"><h2>Meu desempenho</h2><div class="rows"><div class="entry">Vendas diretas <div id="sales" class="num">—</div></div><div class="entry">Comissões apuradas <div id="commission" class="num">—</div></div><div class="entry">Comissões da rede <div id="networkCommission" class="num">—</div></div></div><p class="tiny muted">Os valores dependem dos pedidos pagos e confirmados pelo servidor.</p></section>
+<section class="card"><h2>Minha rede</h2><div id="network" class="rows"></div><p class="tiny muted">Sua rede é consultada no Neon. A geração elegível depende da regra financeira aprovada.</p></section>
+<section class="card full"><h2>Extrato e novidades</h2><div id="statements" class="rows"></div></section>
+</div></main><script src="vitrine-uk.js"></script><script src="afiliados-uk.js"></script></body></html>

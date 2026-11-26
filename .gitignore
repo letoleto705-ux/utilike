@@ -1,0 +1,27 @@
+.env
+dados_garimpagem
+__pycache__
+Utilike_Garimpagem_Pausa_Retomada
+capitura manual
+dados_garimpagem
+.env
+.env.*
+**/.env
+**/.env.*robo-copy/.venv/
+**/__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+robo-copy/logs/
+robo-copy/saidas/
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+robo-copy/.venv/
+
+
+

@@ -1,0 +1,19 @@
+{
+  "name": "utilike-doravante",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check bulk-import-routes.js && node --check import-worker.js && node --check public/bulk-queue.js && node --check automacao-cronjob.js && node --check aprovacao-manual-routes.js && node --check public/bulk-import.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

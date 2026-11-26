@@ -1,0 +1,10 @@
+# REFERENCIA — nao publique secrets no GitHub, nao cole o .env no chat.
+# Crie variaveis de ambiente locais no Windows PowerShell (somente na sessao):
+# $env:DATABASE_URL = 'postgresql://... NEON BRANCH DE TESTE ...'
+# $env:ROBO_COPY_PERMITIR_ESCRITA = 'SIM'
+# $env:ROBO_COPY_MODELO = 'gemma3:4b'
+# $env:UTI_LIKE_BASE_URL = 'https://utilike.onrender.com'
+# Ollama usa http://localhost:11434 — nenhuma chave do Gemini.
+# Execute python robo_copy.py --modo simular --limite 2 --visivel
+# Depois de testar / validar uma branch: python robo_copy.py --modo gravar --limite 2 --visivel
+# Em producao, autorizacao separada. Nunca envie DATABASE_URL a terceiros.

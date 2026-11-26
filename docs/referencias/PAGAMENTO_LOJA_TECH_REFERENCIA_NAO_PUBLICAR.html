@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Página de Pagamentos - Relatório Financeiro de Afiliados</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="responsive.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        tech: { orange: '#FF5722', darkOrange: '#E65100', lightOrange: '#FF9800', bg: '#F8FAFC', card: '#FFFFFF', border: '#E2E8F0' }
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gradient-orange { background: linear-gradient(135deg, #FF5722 0%, #FF9800 100%); }
+        .shadow-orange-glow { box-shadow: 0 10px 25px -5px rgba(255, 87, 34, 0.3); }
+        .glass-header { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col justify-between text-sm">
+
+    <header class="fixed top-0 left-0 w-full z-40 glass-header border-b border-slate-200">
+        <div class="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl gradient-orange flex items-center justify-center text-white shadow-orange-glow">
+                    <i class="fa-solid fa-wallet text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-lg tracking-wide text-slate-900">TECH PAYMENTS</h1>
+                    <p class="text-[11px] text-slate-500 font-semibold tracking-wider uppercase -mt-1">Portal de Comissões a Pagar</p>
+                </div>
+            </div>
+            <a href="index.html" class="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition">
+                <i class="fa-solid fa-arrow-left mr-1.5 text-orange-600"></i> Voltar à Loja
+            </a>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 pt-28 pb-16 w-full flex-1 space-y-6">
+
+        <section class="bg-white rounded-3xl p-6 sm:p-8 border border-orange-200 shadow-sm space-y-5">
+            <div>
+                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-ticket text-orange-600 mr-2"></i>Gerenciamento de Cupons de Afiliados</h2>
+                <p class="mt-1 text-xs text-slate-500">Defina a campanha global e aprove os códigos cadastrados pelos afiliados.</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3 items-end">
+                <label class="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-xs font-bold">
+                    <input type="checkbox" id="adminCuponsAtivo" class="h-4 w-4 accent-orange-600">
+                    Campanha de cupons ativa para afiliados
+                </label>
+                <label class="text-xs font-bold text-slate-600">Desconto máximo (%)
+                    <input type="number" id="adminCuponsPercentual" min="0" max="100" step="0.01" value="10" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5">
+                </label>
+                <button type="button" onclick="salvarConfiguracaoCupons()" class="rounded-xl bg-orange-600 px-4 py-3 text-xs font-bold text-white">Salvar regra</button>
+            </div>
+            <p id="statusGestaoCupons" class="text-xs" role="status"></p>
+            <div id="listaCuponsAfiliados" class="space-y-2"></div>
+        </section>
+
+        <section class="bg-white rounded-3xl p-6 sm:p-8 border border-blue-200 shadow-sm space-y-4">
+            <div>
+                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-bullhorn text-blue-600 mr-2"></i>Comunicação e Campanhas</h2>
+                <p class="mt-1 text-xs text-slate-500">O comunicado será exibido nos painéis dos afiliados. Use {nome} ou {primeiro_nome} para personalizar.</p>
+            </div>
+            <form onsubmit="publicarNotificacao(event)" class="space-y-3">
+                <input id="tituloNotificacao" maxlength="255" required placeholder="Título do comunicado" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm">
+                <textarea id="mensagemNotificacao" rows="4" maxlength="10000" required placeholder="Mensagem para os afiliados..." class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm"></textarea>
+                <button type="submit" class="rounded-xl bg-blue-700 px-5 py-3 text-xs font-bold text-white">Publicar Comunicado para Todos os Afiliados</button>
+            </form>
+            <p id="statusNotificacaoAdmin" class="text-xs" role="status"></p>
+            <div id="listaNotificacoesAdmin" class="space-y-2"></div>
+        </section>
+        
+        <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+                <span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-widest border border-emerald-200 inline-block mb-2">
+                    Painel Gerencial Restrito
+                </span>
+                <h2 class="text-2xl sm:text-3xl font-black text-slate-900">Relatório de Pagamentos Pix</h2>
+                <p class="text-xs text-slate-500 mt-1">Consulte os saldos calculados automaticamente e gerencie os cadastros da rede unificada.</p>
+            </div>
+            <div class="bg-emerald-50 px-5 py-3.5 rounded-2xl border border-emerald-200 text-right">
+                <span class="text-[10px] text-emerald-700 block uppercase font-bold">Total Geral a Distribuir</span>
+                <span id="lblTotalGeralPagar" class="text-xl font-black text-emerald-800">R$ 0,00</span>
+            </div>
+        </div>
+
+        <div id="avisoCalendarioSaque" class="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-xs text-blue-900 leading-relaxed"></div>
+
+        <div class="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+                <h3 class="text-sm font-black text-slate-900">Fechamento do ciclo de afiliados</h3>
+                <p id="resumoLiquidacaoLote" class="text-xs text-slate-500 mt-1">Disponível para o administrador a qualquer momento, para saldos elegíveis de meses anteriores.</p>
+            </div>
+            <button type="button" id="btnLiquidarLote" onclick="liquidarCicloAfiliados()" class="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fa-solid fa-money-bill-transfer mr-1"></i> Processar Fechamento de Ciclo e Liquidar Pagamentos
+            </button>
+        </div>
+
+        <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-4">
+            <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+                <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-headset text-orange-500"></i>
+                    <span>Suporte: Contas e Senha Temporária</span>
+                </h3>
+            </div>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-end gap-3">
+                <div class="flex-1">
+                    <label class="text-slate-500 block text-[10px] uppercase font-bold mb-1">WhatsApp do Suporte (com DDD, só números; aparece como botão na loja)</label>
+                    <input type="text" id="whatsappSuporteInput" placeholder="Ex: 11912345678" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono outline-none focus:border-emerald-500">
+                </div>
+                <button onclick="salvarWhatsappSuporte()" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition">
+                    <i class="fa-solid fa-floppy-disk mr-1"></i> Salvar WhatsApp
+                </button>
+            </div>
+
+            <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 leading-relaxed">
+                <strong>Antes de gerar uma senha:</strong> confirme a identidade de quem pediu (CPF, e-mail e telefone do cadastro) e envie a senha <strong>somente para o telefone cadastrado</strong>, nunca para um número novo informado na conversa. A senha vale 24 horas e o cliente é obrigado a trocá-la ao entrar.
+            </div>
+
+            <div class="flex gap-2">
+                <input type="text" id="buscaContaInput" onkeydown="if(event.key==='Enter') buscarContas()" placeholder="Buscar por nome, usuário, e-mail, CPF ou telefone" class="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs outline-none focus:border-orange-500">
+                <button onclick="buscarContas()" class="px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition"><i class="fa-solid fa-magnifying-glass mr-1"></i> Buscar</button>
+            </div>
+
+            <div id="resultadoSenhaBox" class="hidden bg-emerald-50 border border-emerald-300 rounded-2xl p-4 space-y-2 text-xs"></div>
+
+            <div id="contasContainer" class="space-y-3"></div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-4">
+            <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+                <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-users-rectangle text-emerald-600"></i>
+                    <span>Extrato de Comissões por Afiliado</span>
+                </h3>
+                <span id="qtdAfiliadosRelatorio" class="bg-slate-100 text-slate-700 font-bold text-xs px-3 py-1 rounded-lg">0 Afiliados Cadastrados</span>
+            </div>
+
+            <div id="relatorioPagamentosContainer" class="space-y-4"></div>
+        </div>
+
+    </main>
+
+    <footer class="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
+        <p>&copy; 2026 Tech - Software de Gestão. Todos os direitos reservados.</p>
+    </footer>
+
+    <!-- SCRIPT DA SESSÃO DE PAGAMENTOS UNIFICADA -->
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            // Painel restrito: exige o login de Administrador feito na loja
+            if (!localStorage.getItem('tech_token')) {
+                alert('Acesso restrito. Entre como Administrador na loja.');
+                window.location.href = 'index.html';
+                return;
+            }
+            carregarRelatorioPagamentos();
+            carregarConfigSuporte();
+            buscarContas();
+            carregarGestaoCupons();
+            carregarNotificacoesAdmin();
+        });
+
+        function normalizarTexto(txt) {
+            return txt ? txt.toString().trim().toLowerCase() : '';
+        }
+
+
+        // ===== CONEXÃO COM O SERVIDOR (Render + banco Neon) =====
+        const API_URL = ''; // vazio = mesmo endereço do site (Render serve as páginas e a API juntas)
+        const CHAVE_INDICADOR = 'tech_afiliado_indicador';
+        let configuracaoSaque = { valorMinimoSaque: 50, calendarioSaque: { liberado: false, dataSaque: '' } };
+        let liquidacaoEmAndamento = false;
+
+        function esc(t) {
+            return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        async function api(metodo, caminho, corpo) {
+            const headers = { 'Content-Type': 'application/json' };
+            const token = localStorage.getItem('tech_token');
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            let resp;
+            try {
+                resp = await fetch(API_URL + caminho, { method: metodo, headers, body: corpo !== undefined ? JSON.stringify(corpo) : undefined });
+            } catch (e) {
+                throw new Error('Sem conexão com o servidor. Tente novamente em instantes.');
+            }
+            let dados = {};
+            try { dados = await resp.json(); } catch (e) {}
+            if (resp.status === 401 || resp.status === 403) {
+                alert(dados.erro || 'Acesso restrito. Entre como Administrador na loja.');
+                window.location.href = 'index.html';
+                throw new Error(dados.erro || 'Acesso restrito.');
+            }
+            if (!resp.ok) throw new Error(dados.erro || 'Erro inesperado no servidor.');
+            return dados;
+        }
+
+        // true se "filho" tem "pai" como patrocinador (casa por id OU por usuário)
+        function ehFilhoDe(filho, pai) {
+            const ref = normalizarTexto(filho.patrocinadorId);
+            if (!ref || ref === 'admin') return false;
+            return ref === normalizarTexto(pai.id) || ref === normalizarTexto(pai.usuario);
+        }
+
+        async function carregarRelatorioPagamentos() {
+            const container = document.getElementById('relatorioPagamentosContainer');
+            const lblTotalGeral = document.getElementById('lblTotalGeralPagar');
+            const badgeQtd = document.getElementById('qtdAfiliadosRelatorio');
+
+            // Fonte única de dados: banco Neon, via API (tabela afiliados)
+            let listaAfiliados = [];
+            try {
+                const [afiliados, config] = await Promise.all([
+                    api('GET', '/api/afiliados'),
+                    api('GET', '/api/config')
+                ]);
+                listaAfiliados = afiliados;
+                configuracaoSaque = {
+                    valorMinimoSaque: Number(config.valorMinimoSaque),
+                    calendarioSaque: config.calendarioSaque
+                };
+            } catch (err) {
+                container.innerHTML = `<div class="text-center py-12 text-xs font-semibold text-red-600">${esc(err.message)}</div>`;
+                return;
+            }
+            document.getElementById('avisoCalendarioSaque').innerHTML =
+                `<strong>Pagamentos:</strong> o administrador pode processar as baixas manualmente a qualquer momento. Os pagamentos aos afiliados seguem o calendário de até o 5º dia útil. São elegíveis as comissões aprovadas em meses anteriores e iguais ou superiores ao mínimo de <strong>R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}</strong>.`;
+
+            const afiliadosComSaldo = listaAfiliados.filter(af => Number(af.comissaoPendente) > 0);
+            const afiliadosElegiveis = listaAfiliados.filter(af => Number(af.comissaoLiberar) >= configuracaoSaque.valorMinimoSaque
+                && Number(af.comissaoLiberar) > 0);
+            badgeQtd.innerText = `${afiliadosComSaldo.length} afiliado(s) com saldo · ${afiliadosElegiveis.length} elegível(is) para pagamento`;
+            const botaoLote = document.getElementById('btnLiquidarLote');
+            botaoLote.disabled = liquidacaoEmAndamento;
+            document.getElementById('resumoLiquidacaoLote').innerText =
+                `${afiliadosElegiveis.length} afiliado(s) elegível(is) para liquidação; os demais saldos permanecerão acumulados. O processamento pode ser feito a qualquer momento.`;
+
+            if (listaAfiliados.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <i class="fa-solid fa-wallet text-slate-300 text-4xl mb-3"></i>
+                        <p class="text-xs font-semibold text-slate-500">Nenhum afiliado registrado no banco de dados.</p>
+                    </div>
+                `;
+                lblTotalGeral.innerText = "R$ 0,00";
+                return;
+            }
+
+            if (afiliadosComSaldo.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <i class="fa-solid fa-wallet text-slate-300 text-4xl mb-3"></i>
+                        <p class="text-xs font-semibold text-slate-500">Nenhuma comissão pendente foi registrada. As comissões são lançadas após a confirmação do pagamento.</p>
+                    </div>`;
+                lblTotalGeral.innerText = 'R$ 0,00';
+                return;
+            }
+
+            container.innerHTML = '';
+            let somaTotalGeral = 0;
+
+            afiliadosComSaldo.forEach(af => {
+                let paiInfo = "Nenhum (Indicação Direta da Central)";
+                const refPai = normalizarTexto(af.patrocinadorId);
+                if (refPai && refPai !== 'admin') {
+                    const pai = listaAfiliados.find(p => normalizarTexto(p.id) === refPai || normalizarTexto(p.usuario) === refPai);
+                    if (pai) {
+                        paiInfo = `Patrocinador (Pai): ${pai.nome} (@${pai.usuario})`;
+                    } else {
+                        paiInfo = `Patrocinador: @${af.patrocinadorId}`;
+                    }
+                }
+
+                // Sub-afiliados vinculados a este afiliado (ex: a Neyza vinculada ao Roll)
+                const meusFilhos = listaAfiliados.filter(f => ehFilhoDe(f, af));
+
+                const com = {
+                    direta: Number(af.comissaoDiretaPendente) || 0,
+                    rede: Number(af.comissaoRedePendente) || 0,
+                    total: Number(af.comissaoPendente) || 0
+                };
+                const comissaoDireta = com.direta;
+                const comissaoRede = com.rede;
+                const totalAfiliado = com.total;
+                const totalElegivelAfiliado = Number(af.comissaoLiberar) || 0;
+                const podeLiquidarAfiliado = totalElegivelAfiliado > 0
+                    && totalElegivelAfiliado >= configuracaoSaque.valorMinimoSaque;
+                somaTotalGeral += totalAfiliado;
+
+                container.innerHTML += `
+                    <div data-afiliado-card="${esc(af.id)}" data-total-pendente="${totalAfiliado}" class="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200 pb-3">
+                            <div>
+                                <span class="bg-emerald-100 text-emerald-800 font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase">${esc(paiInfo)}</span>
+                                <h4 class="text-base font-black text-slate-900 mt-1">${esc(af.nome)} <span class="text-xs text-slate-400 font-normal">(@${esc(af.usuario)})</span></h4>
+                                <p class="text-xs text-slate-500 font-mono">ID: ${esc(af.id)} | CPF: ${esc(af.cpf || 'Não informado')} · Tel: ${esc(af.telefone || 'Não informado')}</p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                                <div class="bg-emerald-600 text-white px-4 py-2.5 rounded-xl shadow-sm text-right">
+                                    <span class="text-[10px] uppercase block font-bold text-emerald-100">Saldo de Comissão Pendente</span>
+                                    <span class="text-base font-black">R$ ${totalAfiliado.toFixed(2)}</span>
+                                    <span class="text-[10px] block text-emerald-100">Elegível neste ciclo: R$ ${totalElegivelAfiliado.toFixed(2)}</span>
+                                </div>
+                                <button onclick="confirmarPagamentoAfiliado(this)" data-afiliado-id="${esc(af.id)}" data-afiliado-nome="${esc(af.nome)}" data-valor-pendente="${totalElegivelAfiliado}" ${podeLiquidarAfiliado ? '' : 'disabled'} class="px-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-[10px] sm:text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed" title="${podeLiquidarAfiliado ? 'Confirme após realizar o pagamento Pix manualmente' : 'O saldo de meses anteriores ainda não atingiu o mínimo para pagamento'}">
+                                    <i class="fa-solid fa-money-bill-transfer mr-1"></i> Confirmar Pagamento / Dar Baixa
+                                </button>
+                                <button onclick="deletarAfiliado('${esc(af.id)}')" class="px-3.5 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition" title="Excluir Afiliado" aria-label="Excluir afiliado">
+                                    <i class="fa-solid fa-trash-can"></i> Excluir
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                            <div class="bg-white p-3 rounded-xl border border-slate-200 flex flex-col justify-between">
+                                <div>
+                                    <span class="text-slate-400 block text-[10px] uppercase font-bold">Chave Pix (CPF)</span>
+                                    <strong class="text-slate-900 font-mono text-sm">${esc(af.pix || af.cpf || 'Não informada')}</strong>
+                                </div>
+                                <button onclick="copiarChavePix('${esc(af.pix || af.cpf || '')}')" class="mt-2 py-1.5 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[11px] font-bold transition text-center">
+                                    <i class="fa-solid fa-copy mr-1"></i> Copiar Chave Pix
+                                </button>
+                            </div>
+
+                            <div class="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
+                                <span class="text-slate-400 block text-[10px] uppercase font-bold">Comissão Direta Pendente</span>
+                                <div class="text-slate-800 font-semibold">${af.vendasDiretas || 0} venda(s)</div>
+                                <div class="text-orange-600 font-black text-sm">R$ ${comissaoDireta.toFixed(2)}</div>
+                            </div>
+
+                            <div class="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
+                                <span class="text-slate-400 block text-[10px] uppercase font-bold">Comissão de Rede Pendente</span>
+                                <div class="text-emerald-700 font-semibold">${meusFilhos.length} sub-afiliado(s)</div>
+                                <div class="text-emerald-600 font-black text-sm">R$ ${comissaoRede.toFixed(2)}</div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-3 rounded-xl border border-slate-200 text-xs space-y-2">
+                            <span class="text-slate-500 font-bold uppercase tracking-wider text-[10px] flex items-center gap-1">
+                                <i class="fa-solid fa-sitemap text-emerald-600"></i> Sub-afiliados vinculados a este parceiro:
+                            </span>
+                            <div class="flex flex-wrap gap-2">
+                                ${meusFilhos.length > 0 ? meusFilhos.map(f => `<span class="bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg text-slate-700 font-medium">${esc(f.nome)} (@${esc(f.usuario)}) — ${f.vendasDiretas || 0} venda(s)</span>`).join('') : '<span class="text-slate-400 italic">Nenhum sub-afiliado cadastrado na rede deste parceiro.</span>'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            lblTotalGeral.innerText = `R$ ${(Math.round(somaTotalGeral * 100) / 100).toFixed(2)}`;
+        }
+
+        async function liquidarCicloAfiliados() {
+            const botao = document.getElementById('btnLiquidarLote');
+            if (liquidacaoEmAndamento) return;
+            if (!confirm('Confirma que os pagamentos Pix de todos os afiliados elegíveis já foram realizados? O sistema dará baixa apenas em saldos de meses anteriores que atingiram o mínimo. Saldos abaixo do mínimo continuarão acumulados.')) return;
+
+            liquidacaoEmAndamento = true;
+            botao.disabled = true;
+            const conteudoOriginal = botao.innerHTML;
+            botao.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Processando fechamento...';
+            try {
+                const resultado = await api('POST', '/api/admin/afiliados/liquidar-lote');
+                await carregarRelatorioPagamentos();
+                alert(`Fechamento concluído: ${resultado.afiliadosLiquidados} afiliado(s) liquidado(s), R$ ${Number(resultado.valorPago).toFixed(2)} baixados em ${resultado.quantidade} comissão(ões). Saldos abaixo do mínimo foram mantidos para o próximo ciclo.`);
+            } catch (err) {
+                await carregarRelatorioPagamentos();
+                alert(err.message);
+            } finally {
+                liquidacaoEmAndamento = false;
+                botao.innerHTML = conteudoOriginal;
+                botao.disabled = false;
+            }
+        }
+
+        async function confirmarPagamentoAfiliado(botao) {
+            const id = botao.dataset.afiliadoId;
+            const nome = botao.dataset.afiliadoNome;
+            const saldo = Number(botao.dataset.valorPendente) || 0;
+            if (saldo < configuracaoSaque.valorMinimoSaque) {
+                alert(`Pagamento não realizado: O saldo está abaixo do mínimo exigido de R$ ${configuracaoSaque.valorMinimoSaque.toFixed(2)}. O valor continuará acumulado.`);
+                return;
+            }
+            if (!confirm(`Confirma que o Pix mensal de ${nome} foi realizado? Esta ação dará baixa nas comissões acumuladas de meses anteriores, diretas e de rede.`)) return;
+
+            const conteudoOriginal = botao.innerHTML;
+            botao.disabled = true;
+            botao.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Processando...';
+            try {
+                const resultado = await api('POST', '/api/admin/afiliados/' + encodeURIComponent(id) + '/pagar');
+                await carregarRelatorioPagamentos();
+                if (resultado.quantidade > 0) {
+                    alert(`Pagamento confirmado: R$ ${Number(resultado.valorPago).toFixed(2)} baixados em ${resultado.quantidade} comissão(ões).`);
+                } else {
+                    alert('Nenhuma comissão pendente foi encontrada. O afiliado já está em dia.');
+                }
+            } catch (err) {
+                botao.disabled = false;
+                botao.innerHTML = conteudoOriginal;
+                alert(err.message);
+            }
+        }
+
+        // ===== SUPORTE: busca de contas e senha temporária =====
+        async function carregarConfigSuporte() {
+            try {
+                const cfg = await api('GET', '/api/config');
+                document.getElementById('whatsappSuporteInput').value = cfg.whatsappSuporte || '';
+            } catch (err) { console.warn(err.message); }
+        }
+
+        async function salvarWhatsappSuporte() {
+            const numero = document.getElementById('whatsappSuporteInput').value.trim();
+            try {
+                await api('PUT', '/api/config', { whatsappSuporte: numero });
+                alert(numero ? 'WhatsApp do suporte salvo. O botão já aparece na loja.' : 'WhatsApp do suporte removido.');
+                carregarConfigSuporte();
+            } catch (err) { alert(err.message); }
+        }
+
+        async function buscarContas() {
+            const box = document.getElementById('contasContainer');
+            const termo = document.getElementById('buscaContaInput').value.trim();
+            let contas = [];
+            try {
+                contas = await api('GET', '/api/admin/contas?q=' + encodeURIComponent(termo));
+            } catch (err) {
+                box.innerHTML = `<div class="text-xs font-semibold text-red-600">${esc(err.message)}</div>`;
+                return;
+            }
+            if (!contas.length) {
+                box.innerHTML = `<div class="text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs font-semibold text-slate-500">Nenhuma conta encontrada.</div>`;
+                return;
+            }
+            box.innerHTML = contas.map(c => `
+                <div data-conta-usuario="${esc(c.usuario)}" class="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap justify-between items-center gap-3 text-xs">
+                    <div>
+                        <strong class="text-slate-900 text-sm">${esc(c.nome)}</strong>
+                        <span class="ml-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${c.afiliado ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}">${c.afiliado ? 'Afiliado' : 'Cliente'}</span>
+                        ${c.aguardandoTroca ? '<span class="ml-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">Troca de senha pendente</span>' : ''}
+                        <div class="text-slate-500 font-mono">@${esc(c.usuario)}</div>
+                        <div class="text-slate-600">${esc(c.email)} · CPF ${esc(c.cpf || 'não informado')} · Tel ${esc(c.telefone || 'não informado')}</div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="gerarSenhaTemporaria('${esc(c.usuario)}')" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"><i class="fa-solid fa-key mr-1"></i> Gerar senha temporária</button>
+                        <button onclick="deletarConta('${esc(c.usuario)}')" class="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition" title="Excluir usuário permanentemente" aria-label="Excluir usuário ${esc(c.usuario)}"><i class="fa-solid fa-trash-can mr-1"></i> Excluir usuário</button>
+                    </div>
+                </div>`).join('');
+        }
+
+        async function deletarConta(usuario) {
+            if (!confirm(`Deseja realmente excluir permanentemente a conta @${usuario}? Se for afiliado, a rede de sub-afiliados será preservada.`)) return;
+            const card = Array.from(document.querySelectorAll('[data-conta-usuario]'))
+                .find(item => item.dataset.contaUsuario === String(usuario));
+            try {
+                await api('DELETE', '/api/admin/contas/' + encodeURIComponent(usuario));
+                if (card) card.remove();
+                await Promise.all([buscarContas(), carregarRelatorioPagamentos()]);
+                alert('Usuário excluído com sucesso.');
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        async function gerarSenhaTemporaria(usuario) {
+            if (!confirm(`Gerar uma senha temporária para @${usuario}?\n\nA senha atual deixa de funcionar agora. Você já confirmou a identidade da pessoa?`)) return;
+            const box = document.getElementById('resultadoSenhaBox');
+            try {
+                const r = await api('POST', '/api/admin/contas/' + encodeURIComponent(usuario) + '/senha-temporaria');
+                const msg = `Olá, ${r.nome}! Sua senha temporária da Loja Tech é: ${r.senhaTemporaria}\nEla vale por ${r.validaHoras} horas e, ao entrar, você vai criar uma senha nova. Não compartilhe com ninguém.`;
+                const envio = r.whatsapp
+                    ? `<a href="https://wa.me/${esc(r.whatsapp)}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener" class="inline-block px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition"><i class="fa-brands fa-whatsapp mr-1"></i> Enviar pelo WhatsApp (telefone cadastrado)</a>`
+                    : `<span class="text-amber-800 font-semibold">Esta conta não tem telefone cadastrado. Não envie a senha para outro número sem confirmar a identidade.</span>`;
+                box.innerHTML = `
+                    <div class="font-black text-emerald-900">Senha temporária de ${esc(r.nome)} (@${esc(r.usuario)})</div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <code class="px-3 py-2 bg-white border border-emerald-300 rounded-lg text-base font-black tracking-widest text-slate-900">${esc(r.senhaTemporaria)}</code>
+                        <button onclick="copiarTextoSimples('${esc(r.senhaTemporaria)}')" class="px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold">Copiar</button>
+                    </div>
+                    <div class="text-emerald-800">Esta senha aparece só agora e vale ${esc(r.validaHoras)} horas. O cliente será obrigado a trocá-la ao entrar.</div>
+                    <div>${envio}</div>`;
+                box.classList.remove('hidden');
+                box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                buscarContas();
+            } catch (err) { alert(err.message); }
+        }
+
+        function copiarTextoSimples(texto) {
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(texto).then(() => alert('Copiado!'), () => prompt('Copie:', texto));
+            } else {
+                prompt('Copie:', texto);
+            }
+        }
+
+        async function deletarAfiliado(idAfiliado) {
+            if (!confirm("Deseja realmente excluir este afiliado? A conta e o acesso serão removidos permanentemente. Os filhos vinculados continuarão ativos e subirão para o patrocinador anterior.")) return;
+            try {
+                await api('DELETE', '/api/afiliados/' + encodeURIComponent(idAfiliado));
+                const card = Array.from(document.querySelectorAll('[data-afiliado-card]'))
+                    .find(item => item.dataset.afiliadoCard === String(idAfiliado));
+                if (card) {
+                    card.remove();
+                    const cardsRestantes = Array.from(document.querySelectorAll('[data-afiliado-card]'));
+                    const totalRestante = cardsRestantes.reduce((total, item) => total + (Number(item.dataset.totalPendente) || 0), 0);
+                    document.getElementById('lblTotalGeralPagar').innerText = `R$ ${totalRestante.toFixed(2)}`;
+                    document.getElementById('qtdAfiliadosRelatorio').innerText = `${cardsRestantes.length} elegível(is) para pagamento`;
+                }
+                await Promise.all([carregarRelatorioPagamentos(), buscarContas()]);
+                alert("Afiliado excluído com sucesso! A rede de sub-afiliados foi preservada.");
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        async function carregarGestaoCupons() {
+            const lista = document.getElementById('listaCuponsAfiliados');
+            try {
+                const dados = await api('GET', '/api/admin/cupons');
+                document.getElementById('adminCuponsAtivo').checked = dados.ativo;
+                document.getElementById('adminCuponsPercentual').value = dados.percentualMaximo;
+                lista.innerHTML = dados.afiliados.length ? dados.afiliados.map(af => `
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                    <div class="min-w-0">
+                            <strong class="text-slate-900">${esc(af.nome)} (@${esc(af.usuario)})</strong>
+                            <span class="ml-2 text-slate-600">${af.codigo ? esc(af.codigo) : 'Ainda não cadastrou cupom'}</span>
+                        ${af.codigo ? `<span class="ml-2 font-bold ${af.expirado ? 'text-red-700' : af.ativo ? 'text-emerald-700' : 'text-amber-700'}">${af.expirado ? 'Expirado' : af.ativo ? 'Ativo' : 'Inativo'}</span>` : ''}
+                        </div>
+                    ${af.codigo ? `<div class="flex flex-col sm:flex-row sm:items-end gap-2">
+                        <label class="text-[10px] font-bold text-slate-500">Válido até (em branco = sem expiração)
+                            <input type="date" id="validadeCupom-${Number(af.cupomId)}" value="${esc(String(af.dataValidade || '').slice(0, 10))}" class="mt-1 block rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs">
+                        </label>
+                        <button type="button" onclick="salvarValidadeCupom(${Number(af.cupomId)})" class="rounded-lg bg-blue-100 px-3 py-2 font-bold text-blue-800">Salvar validade</button>
+                        <button type="button" onclick="alterarStatusCupom(${Number(af.cupomId)}, ${!af.ativo})" class="rounded-lg px-3 py-2 font-bold ${af.ativo ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}">${af.ativo ? 'Desativar' : 'Ativar'}</button>
+                    </div>` : ''}
+                    </div>`).join('') : '<p class="text-xs text-slate-500">Nenhum afiliado cadastrado.</p>';
+            } catch (err) {
+                lista.innerHTML = `<p class="text-xs text-red-600">${esc(err.message)}</p>`;
+            }
+        }
+
+        async function salvarConfiguracaoCupons() {
+            const status = document.getElementById('statusGestaoCupons');
+            try {
+                const resultado = await api('PUT', '/api/admin/cupons/config', {
+                    ativo: document.getElementById('adminCuponsAtivo').checked,
+                    percentualMaximo: Number(document.getElementById('adminCuponsPercentual').value)
+                });
+                status.className = 'text-xs text-emerald-700';
+                status.innerText = `Regra salva. Campanha ${resultado.ativo ? 'ativa' : 'desativada'}, limite de ${resultado.percentualMaximo}%.`;
+                await carregarGestaoCupons();
+            } catch (err) {
+                status.className = 'text-xs text-red-600';
+                status.innerText = err.message;
+            }
+        }
+
+        async function alterarStatusCupom(id, ativo) {
+            try {
+                await api('PATCH', `/api/admin/cupons/${encodeURIComponent(id)}`, { ativo });
+                await carregarGestaoCupons();
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        async function salvarValidadeCupom(id) {
+            const dataValidade = document.getElementById(`validadeCupom-${id}`).value || null;
+            try {
+                await api('PATCH', `/api/admin/cupons/${encodeURIComponent(id)}`, { dataValidade });
+                await carregarGestaoCupons();
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        async function carregarNotificacoesAdmin() {
+            const lista = document.getElementById('listaNotificacoesAdmin');
+            try {
+                const avisos = await api('GET', '/api/admin/notificacoes');
+                lista.innerHTML = avisos.length ? avisos.map(aviso => `
+                    <article class="flex flex-col sm:flex-row sm:items-start justify-between gap-3 rounded-xl border border-slate-200 p-3 text-xs">
+                        <div class="min-w-0">
+                            <strong class="block text-slate-900">${esc(aviso.titulo)}</strong>
+                            <p class="mt-1 whitespace-pre-line text-slate-600">${esc(aviso.mensagem)}</p>
+                            <span class="mt-2 block text-[10px] text-slate-400">${esc(new Date(aviso.data_criacao).toLocaleString('pt-BR'))} · ${aviso.ativa ? 'Ativo' : 'Inativo'}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" onclick="alterarStatusNotificacao(${Number(aviso.id)}, ${!aviso.ativa})" class="rounded-lg px-3 py-2 font-bold ${aviso.ativa ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">${aviso.ativa ? 'Desativar' : 'Reativar'}</button>
+                            <button type="button" onclick="excluirNotificacao(${Number(aviso.id)})" class="rounded-lg bg-red-100 px-3 py-2 font-bold text-red-700">Excluir</button>
+                        </div>
+                    </article>`).join('') : '<p class="text-xs text-slate-500">Nenhum comunicado publicado.</p>';
+            } catch (err) {
+                lista.innerHTML = `<p class="text-xs text-red-600">${esc(err.message)}</p>`;
+            }
+        }
+
+        async function publicarNotificacao(event) {
+            event.preventDefault();
+            const status = document.getElementById('statusNotificacaoAdmin');
+            try {
+                await api('POST', '/api/admin/notificacoes', {
+                    titulo: document.getElementById('tituloNotificacao').value,
+                    mensagem: document.getElementById('mensagemNotificacao').value
+                });
+                document.getElementById('tituloNotificacao').value = '';
+                document.getElementById('mensagemNotificacao').value = '';
+                status.className = 'text-xs text-emerald-700';
+                status.innerText = 'Comunicado publicado para todos os afiliados.';
+                await carregarNotificacoesAdmin();
+            } catch (err) {
+                status.className = 'text-xs text-red-600';
+                status.innerText = err.message;
+            }
+        }
+
+        async function alterarStatusNotificacao(id, ativa) {
+            try {
+                await api('PATCH', `/api/admin/notificacoes/${encodeURIComponent(id)}`, { ativa });
+                await carregarNotificacoesAdmin();
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        async function excluirNotificacao(id) {
+            if (!confirm('Excluir este comunicado permanentemente?')) return;
+            try {
+                await api('DELETE', `/api/admin/notificacoes/${encodeURIComponent(id)}`);
+                await carregarNotificacoesAdmin();
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        function copiarChavePix(chave) {
+            if (!chave) {
+                alert("Nenhuma chave Pix cadastrada.");
+                return;
+            }
+            navigator.clipboard.writeText(chave);
+            alert(`Chave Pix (${chave}) copiada com sucesso!`);
+        }
+    </script>
+    <script src="session-timeout.js"></script>
+</body>
+</html>

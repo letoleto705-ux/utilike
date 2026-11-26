@@ -1,0 +1,1171 @@
+'use strict';
+const express = require('express');
+const path = require('path');
+const crypto = require('crypto');
+const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+// ===== Variáveis de ambiente (configure no Render) =====
+const { DATABASE_URL, JWT_SECRET, ADMIN_SENHA } = process.env;
+const ADMIN_USUARIO = (process.env.ADMIN_USUARIO || 'admin').trim().toLowerCase();
+if (!DATABASE_URL || !JWT_SECRET || !ADMIN_SENHA) {
+  console.error('Defina DATABASE_URL, JWT_SECRET e ADMIN_SENHA nas variáveis de ambiente.');
+  process.exit(1);
+}
+
+// ===== Regras padrão de comissão =====
+const TAXA_COMISSAO_PADRAO = 30;
+const TAXA_PATROCINADOR_PADRAO = 10;
+const TAXA_AVO_PADRAO = 10;
+const VALOR_MINIMO_SAQUE_PADRAO = 50;
+const MAX_PARCELAS_CARTAO = 12;
+
+const normalizarMaxParcelasSemJuros = valor => {
+  const parcelas = Number(valor);
+  return Number.isInteger(parcelas) && parcelas >= 0 && parcelas <= MAX_PARCELAS_CARTAO ? parcelas : 1;
+};
+
+const dataIso = valor => {
+  if (!valor) return null;
+  return valor instanceof Date ? valor.toISOString().slice(0, 10) : String(valor).slice(0, 10);
+};
+
+const PRODUTOS_INICIAIS = [];
+
+const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 5 });
+const q = (sql, params) => pool.query(sql, params);
+pool.on('error', err => console.error('ERRO NO NEON:', err));
+
+// ===== Utilitários =====
+const norm = t => (t == null ? '' : String(t).trim().toLowerCase());
+const normUsuario = t => String(t == null ? '' : t)
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .toLowerCase()
+  .replace(/\s+/g, '-');
+const txt = (t, max = 120) => String(t == null ? '' : t).trim().slice(0, max);
+const RE_USUARIO = /^[a-z0-9_.-]{3,30}$/;
+const RE_EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+const RE_CPF = /^[0-9.\-\s]{0,20}$/;
+const RE_PIX = /^[A-Za-z0-9@._+\-\s\/]{0,100}$/;
+const semTags = t => !/[<>]/.test(t);
+const ehUrlWeb = valor => {
+  try {
+    const url = new URL(valor);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && !!url.hostname;
+  } catch {
+    return false;
+  }
+};
+const ehCaminhoImagemLocal = valor => {
+  if (!valor.startsWith('/') || valor.startsWith('//') || valor.includes('\\') || /[\u0000-\u001f]/.test(valor)) return false;
+  try {
+    const pathname = decodeURIComponent(new URL(valor, 'http://localhost').pathname);
+    const segmentos = pathname.split('/').slice(1);
+    return /^\/(?:imagens|uploads|img)\//i.test(pathname)
+      && segmentos.every(segmento => segmento && segment !== '.' && segmento !== '..');
+  } catch {
+    return false;
+  }
+};
+const normalizarCaminhoImagem = valor => {
+  const imagem = txt(valor, 500);
+  if (!/^(?:[a-z]:[\\/]|\\\\)/i.test(imagem)) return imagem;
+
+  const segmentos = imagem.replace(/\\/g, '/').split('/').filter(Boolean);
+  const pastasPublicas = new Set(['imagens', 'uploads', 'img']);
+  let inicio = -1;
+  for (let i = 0; i < segmentos.length - 1; i++) {
+    if (segmentos[i].toLowerCase() === 'public' && pastasPublicas.has(segmentos[i + 1].toLowerCase())) {
+      inicio = i + 1;
+    }
+  }
+  if (inicio === -1) {
+    for (let i = 0; i < segmentos.length - 1; i++) {
+      if (pastasPublicas.has(segmentos[i].toLowerCase())) inicio = i;
+    }
+  }
+  if (inicio === -1) return imagem;
+
+  const caminho = segmentos.slice(inicio);
+  if (caminho.some(segmento => segmento === '.' || segmento === '..' || /[\u0000-\u001f]/.test(segmento))) return imagem;
+  return '/' + caminho.map(segmento => encodeURIComponent(segmento)).join('/');
+};
+const hash256 = s => crypto.createHash('sha256').update(String(s)).digest();
+const igual = (a, b) => crypto.timingSafeEqual(hash256(a), hash256(b));
+const soDigitos = t => String(t == null ? '' : t).replace(/\D/g, '');
+const cpfValido = valor => {
+  const cpf = soDigitos(valor);
+  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+  const calcularDigito = tamanho => {
+    let soma = 0;
+    for (let i = 0; i < tamanho; i++) soma += Number(cpf[i]) * (tamanho + 1 - i);
+    const resto = (soma * 10) % 11;
+    return resto === 10 ? 0 : resto;
+  };
+  return calcularDigito(9) === Number(cpf[9]) && calcularDigito(10) === Number(cpf[10]);
+};
+const RE_TEL = /^\d{10,13}$/;
+const paraWhatsApp = t => { const d = soDigitos(t); return d.length === 10 || d.length === 11 ? '55' + d : d; };
+const gerarToken = (usuario, perfil, trocar = false) => jwt.sign({ usuario, perfil, trocar }, JWT_SECRET, { expiresIn: trocar ? '1h' : '7d' });
+const dadosUsuario = (row, perfil) => ({ usuario: row.usuario, nome: row.nome, email: row.email, cpf: row.cpf, pix: row.pix, telefone: row.telefone || '', perfil });
+const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
+
+async function lerConfig(chave, padrao) {
+  const r = await q('SELECT valor FROM config WHERE chave = $1', [chave]);
+  return r.rows.length ? r.rows[0].valor : padrao;
+}
+async function gravarConfig(chave, valor, client = pool) {
+  await client.query(
+    'INSERT INTO config (chave, valor) VALUES ($1, $2::jsonb) ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor',
+    [chave, JSON.stringify(valor)]
+  );
+}
+
+async function lerTaxas(client = pool) {
+  await client.query(`INSERT INTO config (chave, valor) VALUES
+    ('taxaComissao', $1::jsonb),
+    ('taxaPatrocinador', $2::jsonb),
+    ('taxaAvo', $3::jsonb)
+    ON CONFLICT (chave) DO NOTHING`,
+  [
+    JSON.stringify(TAXA_COMISSAO_PADRAO),
+    JSON.stringify(TAXA_PATROCINADOR_PADRAO),
+    JSON.stringify(TAXA_AVO_PADRAO)
+  ]);
+  const resultado = await client.query(
+    "SELECT chave, valor FROM config WHERE chave IN ('taxaComissao', 'taxaPatrocinador', 'taxaAvo')"
+  );
+  const configuracoes = Object.fromEntries(resultado.rows.map(({ chave, valor }) => [chave, valor]));
+  const direta = Number(configuracoes.taxaComissao ?? TAXA_COMISSAO_PADRAO);
+  const patrocinador = Number(configuracoes.taxaPatrocinador ?? TAXA_PATROCINADOR_PADRAO);
+  const avo = Number(configuracoes.taxaAvo ?? TAXA_AVO_PADRAO);
+  return {
+    taxaComissao: direta,
+    taxaPatrocinador: patrocinador,
+    taxaAvo: avo,
+    taxaCentral: 100 - direta - patrocinador - avo
+  };
+}
+const centavos = (valor, taxa) => Math.round(valor * taxa) / 100;
+const dinheiro = v => Math.round(Number(v || 0) * 100) / 100;
+
+function dataAtualBrasil() {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+  return Object.fromEntries(partes.filter(p => p.type !== 'literal').map(p => [p.type, Number(p.value)]));
+}
+
+function dataInicioMesBrasil() {
+  const { year, month } = dataAtualBrasil();
+  return new Date(Date.UTC(year, month - 1, 1, 3)).toISOString();
+}
+
+function dataPascoa(ano) {
+  const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = (h + l - 7 * m + 114) % 31 + 1;
+  return new Date(Date.UTC(ano, mes - 1, dia));
+}
+
+function quintoDiaUtilBrasil(ano, mes) {
+  const pascoa = dataPascoa(ano);
+  const feriados = new Set([
+    `${ano}-01-01`, `${ano}-04-21`, `${ano}-05-01`, `${ano}-09-07`,
+    `${ano}-10-12`, `${ano}-11-02`, `${ano}-11-15`, `${ano}-11-20`, `${ano}-12-25`
+  ]);
+  const diaMovel = (offset) => {
+    const data = new Date(pascoa);
+    data.setUTCDate(data.getUTCDate() + offset);
+    return data.toISOString().slice(0, 10);
+  };
+  [ -48, -47, -2, 60 ].forEach(offset => feriados.add(diaMovel(offset)));
+
+  let uteis = 0;
+  const cursor = new Date(Date.UTC(ano, mes - 1, 1));
+  while (true) {
+    const semana = cursor.getUTCDay();
+    const data = cursor.toISOString().slice(0, 10);
+    if (semana !== 0 && semana !== 6 && !feriados.has(data)) {
+      uteis++;
+      if (uteis === 5) return data;
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+}
+
+function calendarioSaqueHoje() {
+  const { year, month, day } = dataAtualBrasil();
+  const hoje = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const dataEsteMes = quintoDiaUtilBrasil(year, month);
+  const liberado = day >= 1 && day <= 10;
+  if (!liberado && hoje > dataEsteMes) {
+    const proximoMes = new Date(Date.UTC(year, month, 1));
+    return {
+      dataSaque: quintoDiaUtilBrasil(proximoMes.getUTCFullYear(), proximoMes.getUTCMonth() + 1),
+      liberado
+    };
+  }
+  return { dataSaque: dataEsteMes, liberado };
+}
+
+const mapAf = r => {
+  const direta = dinheiro(r.direta), rede = dinheiro(r.rede);
+  return {
+    id: r.id, usuario: r.usuario, nome: r.nome, email: r.email, cpf: r.cpf, pix: r.pix, telefone: r.telefone || '',
+    patrocinadorId: r.patrocinador_id, criadoEm: r.criado_em,
+    vendasDiretas: Number(r.vendas) || 0, vendasRede: Number(r.vendas_rede) || 0,
+    comissaoDireta: direta, comissaoRede: rede, comissaoTotal: dinheiro(direta + rede),
+    comissaoDiretaPendente: dinheiro(r.direta_pendente), comissaoRedePendente: dinheiro(r.rede_pendente),
+    comissaoPendente: dinheiro(Number(r.direta_pendente || 0) + Number(r.rede_pendente || 0)),
+    comissaoDiretaLiberar: dinheiro(r.direta_liberar), comissaoRedeLiberar: dinheiro(r.rede_liberar),
+    comissaoLiberar: dinheiro(Number(r.direta_liberar || 0) + Number(r.rede_liberar || 0)),
+    comissaoCentral: dinheiro(r.central), faturado: dinheiro(r.faturado)
+  };
+};
+
+function ehFilhoDe(filho, pai) {
+  const ref = norm(filho.patrocinadorId);
+  if (!ref || ref === 'admin') return false;
+  return ref === norm(pai.id) || ref === norm(pai.usuario);
+}
+
+async function afiliadosComComissao() {
+  const r = await q(`
+    SELECT a.*,
+      COALESCE(v.qtd, 0) AS vendas, COALESCE(v.direta, 0) AS direta,
+      COALESCE(v.central, 0) AS central, COALESCE(v.faturado, 0) AS faturado,
+      COALESCE(n.qtd, 0) AS vendas_rede, COALESCE(n.rede, 0) AS rede,
+      COALESCE(pd.direta_pendente, 0) AS direta_pendente,
+      COALESCE(pn.rede_pendente, 0) AS rede_pendente,
+      COALESCE(pd.direta_liberar, 0) AS direta_liberar,
+      COALESCE(pn.rede_liberar, 0) AS rede_liberar
+    FROM afiliados a
+    LEFT JOIN (
+      SELECT afiliado_usuario AS u, count(*)::int AS qtd, sum(comissao) AS direta,
+             sum(comissao_central) AS central, sum(valor) AS faturado
+      FROM pedidos WHERE status = 'pago' AND afiliado_usuario IS NOT NULL GROUP BY 1
+    ) v ON v.u = a.usuario
+    LEFT JOIN (
+      SELECT u, count(DISTINCT pedido_id)::int AS qtd, sum(valor) AS rede
+      FROM (
+        SELECT id AS pedido_id, patrocinador_usuario AS u, comissao_patrocinador AS valor
+        FROM pedidos WHERE status = 'pago' AND patrocinador_usuario IS NOT NULL
+        UNION ALL
+        SELECT id AS pedido_id, avo_usuario AS u, comissao_avo AS valor
+        FROM pedidos WHERE status = 'pago' AND avo_usuario IS NOT NULL
+      ) comissoes_rede
+      GROUP BY u
+    ) n ON n.u = a.usuario
+    LEFT JOIN (
+      SELECT afiliado_usuario AS u, sum(comissao) AS direta_pendente,
+             sum(comissao) FILTER (WHERE pago_em < $1::timestamptz) AS direta_liberar
+      FROM pedidos
+      WHERE status = 'pago' AND status_comissao_direta = 'PENDENTE' AND afiliado_usuario IS NOT NULL
+      GROUP BY 1
+    ) pd ON pd.u = a.usuario
+    LEFT JOIN (
+      SELECT u, sum(valor) AS rede_pendente,
+             sum(valor) FILTER (WHERE pago_em < $1::timestamptz) AS rede_liberar
+      FROM (
+        SELECT patrocinador_usuario AS u, comissao_patrocinador AS valor, pago_em
+        FROM pedidos
+        WHERE status = 'pago' AND status_comissao_patrocinador = 'PENDENTE' AND patrocinador_usuario IS NOT NULL
+        UNION ALL
+        SELECT avo_usuario AS u, comissao_avo AS valor, pago_em
+        FROM pedidos
+        WHERE status = 'pago' AND status_comissao_avo = 'PENDENTE' AND avo_usuario IS NOT NULL
+      ) comissoes_rede_pendentes
+      GROUP BY u
+    ) pn ON pn.u = a.usuario
+    ORDER BY a.criado_em, a.id`, [dataInicioMesBrasil()]);
+  const lista = r.rows.map(mapAf);
+  lista.forEach(a => { a.filhosDiretos = lista.filter(f => ehFilhoDe(f, a)).length; });
+  return lista;
+}
+
+function arvoreOrdenada(lista) {
+  const visitados = new Set();
+  const saida = [];
+  const visitar = (af, nivel) => {
+    if (visitados.has(af.usuario)) return;
+    visitados.add(af.usuario);
+    saida.push({ ...af, nivel });
+    lista.filter(f => ehFilhoDe(f, af)).forEach(f => visitar(f, nivel + 1));
+  };
+  lista.filter(a => !lista.some(p => p !== a && ehFilhoDe(a, p))).forEach(a => visitar(a, 1));
+  lista.forEach(a => visitar(a, 1));
+  return saida;
+}
+
+async function usuarioDoPatrocinador(patrocinadorId, client = pool) {
+  if (!patrocinadorId || norm(patrocinadorId) === 'admin') return null;
+  const r = await client.query('SELECT usuario FROM afiliados WHERE lower(id) = $1 OR usuario = $1', [norm(patrocinadorId)]);
+  return r.rows.length ? r.rows[0].usuario : norm(patrocinadorId);
+}
+
+// ===== Banco =====
+async function iniciarBanco() {
+  await q(`CREATE TABLE IF NOT EXISTS contas (
+    usuario text PRIMARY KEY, nome text NOT NULL, email text NOT NULL,
+    cpf text NOT NULL DEFAULT '', pix text NOT NULL DEFAULT '',
+    senha_hash text NOT NULL, criado_em timestamptz NOT NULL DEFAULT now())`);
+  await q(`CREATE TABLE IF NOT EXISTS afiliados (
+    id text PRIMARY KEY, usuario text UNIQUE NOT NULL, nome text NOT NULL, email text NOT NULL,
+    cpf text NOT NULL DEFAULT '', pix text NOT NULL DEFAULT '', senha_hash text NOT NULL,
+    patrocinador_id text NOT NULL DEFAULT 'admin',
+    vendas_diretas integer NOT NULL DEFAULT 0,
+    comissao_direta numeric(12,2) NOT NULL DEFAULT 0,
+    criado_em timestamptz NOT NULL DEFAULT now())`);
+  await q("ALTER TABLE contas ADD COLUMN IF NOT EXISTS telefone text NOT NULL DEFAULT ''");
+  await q('ALTER TABLE contas ADD COLUMN IF NOT EXISTS trocar_senha boolean NOT NULL DEFAULT false');
+  await q('ALTER TABLE contas ADD COLUMN IF NOT EXISTS temp_expira timestamptz');
+  await q("ALTER TABLE afiliados ADD COLUMN IF NOT EXISTS telefone text NOT NULL DEFAULT ''");
+
+  await q(`CREATE TABLE IF NOT EXISTS pedidos (
+    id text PRIMARY KEY, afiliado_usuario text, produto_id text NOT NULL,
+    valor numeric(12,2) NOT NULL DEFAULT 0, comissao numeric(12,2) NOT NULL DEFAULT 0,
+    status text NOT NULL DEFAULT 'aguardando',
+    criado_em timestamptz NOT NULL DEFAULT now(), pago_em timestamptz)`);
+  await q('ALTER TABLE pedidos ALTER COLUMN afiliado_usuario DROP NOT NULL');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS produto_nome text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS forma text NOT NULL DEFAULT 'pix'");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cliente_nome text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cliente_email text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cliente_cpf text NOT NULL DEFAULT ''");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS patrocinador_usuario text');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_patrocinador numeric(12,2) NOT NULL DEFAULT 0');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS avo_usuario text');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_avo numeric(12,2) NOT NULL DEFAULT 0');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_comissao_direta text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_comissao_patrocinador text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_comissao_avo text NOT NULL DEFAULT ''");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_central numeric(12,2) NOT NULL DEFAULT 0');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS status_comissao_direta text NOT NULL DEFAULT 'PENDENTE'");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_direta timestamptz');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS status_comissao_patrocinador text NOT NULL DEFAULT 'PENDENTE'");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_patrocinador timestamptz');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS status_comissao_avo text NOT NULL DEFAULT 'PENDENTE'");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS data_pagamento_comissao_avo timestamptz');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS download_token text');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_id text');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_idempotency_key text');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_status text NOT NULL DEFAULT ''");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_approved_at timestamptz');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS payment_qr_code_base64 text NOT NULL DEFAULT ''");
+
+  await q(`CREATE TABLE IF NOT EXISTS config (chave text PRIMARY KEY, valor jsonb NOT NULL)`);
+  await q("DELETE FROM config WHERE chave = 'pixChave'");
+
+  const produtosSalvos = await lerConfig('produtos', PRODUTOS_INICIAIS);
+  await gravarConfig('produtos', produtosSalvos.map(produto => ({
+    ...produto,
+    repasseJurosComprador: produto.repasseJurosComprador !== false,
+    maxParcelasSemJuros: normalizarMaxParcelasSemJuros(produto.maxParcelasSemJuros)
+  })));
+
+  await q(`CREATE TABLE IF NOT EXISTS afiliado_cupons (
+    id serial PRIMARY KEY,
+    afiliado_usuario text NOT NULL UNIQUE REFERENCES afiliados(usuario) ON DELETE CASCADE,
+    codigo_cupom varchar(50) NOT NULL UNIQUE,
+    ativo boolean NOT NULL DEFAULT false,
+    data_validade date,
+    criado_em timestamptz NOT NULL DEFAULT now(),
+    atualizado_em timestamptz NOT NULL DEFAULT now()
+  )`);
+  await q('CREATE UNIQUE INDEX IF NOT EXISTS afiliado_cupons_codigo_lower_uidx ON afiliado_cupons (lower(codigo_cupom))');
+
+  await q(`CREATE TABLE IF NOT EXISTS notificacoes_afiliados (
+    id serial PRIMARY KEY,
+    titulo varchar(255) NOT NULL,
+    mensagem text NOT NULL,
+    data_criacao timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ativa boolean NOT NULL DEFAULT true
+  )`);
+
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_original numeric(12,2) NOT NULL DEFAULT 0');
+  await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_codigo text NOT NULL DEFAULT ''");
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_desconto numeric(12,2) NOT NULL DEFAULT 0');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS repasse_juros_comprador boolean NOT NULL DEFAULT true');
+  await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS max_parcelas_sem_juros integer NOT NULL DEFAULT 1');
+
+  await q(`CREATE TABLE IF NOT EXISTS vendas_aprovadas (
+    payment_id text PRIMARY KEY,
+    cpf text NOT NULL DEFAULT '',
+    email text NOT NULL DEFAULT '',
+    produto text NOT NULL DEFAULT 'CMV Food Light',
+    valor numeric(12,2) NOT NULL DEFAULT 0,
+    hwid text,
+    status text NOT NULL DEFAULT 'APROVADO',
+    ativa boolean NOT NULL DEFAULT true
+  )`);
+  await q('CREATE UNIQUE INDEX IF NOT EXISTS vendas_aprovadas_payment_id_uidx ON vendas_aprovadas (payment_id)');
+}
+
+// ===== App =====
+const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use(express.json({ limit: '200kb' }));
+// Sessão UK central: cookie assinado HttpOnly, compartilhado entre páginas e dispositivos
+// que usam as mesmas credenciais. O cookie contém só a identidade autenticada, não a sacola.
+function lerCookieUK(req,nome){
+ const raw=String(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(nome+'='));
+ try{return raw?decodeURIComponent(raw.slice(nome.length+1)):''}catch{return ''}
+}
+function cookieUK(req,res,nome,valor,dias=7){
+ const seguro=req.secure||req.get('x-forwarded-proto')==='https';
+ res.append('Set-Cookie',`${nome}=${encodeURIComponent(valor)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(dias*86400)}; ${seguro?'Secure; ':''}Priority=High`);
+}
+function atribuirCookieLogin(req,res,token){cookieUK(req,res,'uk_sessao',token)}
+// Reconhecimento opcional apenas para a API UK de visitante.
+// A autorização real de ações privadas ainda passa pelo middleware auth.
+app.use('/api/uk',(req,res,next)=>{
+ const t=lerCookieUK(req,'uk_sessao');if(!t)return next();
+ try{req.user=jwt.verify(t,JWT_SECRET);if(req.user.trocar)req.user=null}catch{req.user=null}
+ next();
+});
+
+app.use('/imagens', express.static(path.join(__dirname, 'public', 'imagens')));
+app.use(express.static(path.join(__dirname, 'public')));
+
+const tentativas = new Map();
+function limitarTentativas(req, res, next) {
+  const agora = Date.now();
+  let r = tentativas.get(req.ip);
+  if (!r || agora > r.ate) r = { n: 0, ate: agora + 15 * 60 * 1000 };
+  r.n++;
+  tentativas.set(req.ip, r);
+  if (r.n > 40) return res.status(429).json({ erro: 'Muitas tentativas. Aguarde alguns minutos.' });
+  next();
+}
+
+function auth(req, res, next) {
+  const h = req.headers.authorization || '';
+  const cookieToken=lerCookieUK(req,'uk_sessao');
+  try {
+    try{req.user = jwt.verify(h.startsWith('Bearer ') ? h.slice(7) : cookieToken, JWT_SECRET)}catch(e){if(!cookieToken)throw e;req.user=jwt.verify(cookieToken,JWT_SECRET)}
+  } catch (e) {
+    return res.status(401).json({ erro: 'Sessão expirada. Faça login novamente.' });
+  }
+  if (req.user.trocar && !req.path.startsWith('/api/senha/')) {
+    return res.status(403).json({ erro: 'Defina uma nova senha antes de continuar.', trocarSenha: true });
+  }
+  if (req.user.perfil === 'admin') return next();
+
+  const consultaConta = req.user.perfil === 'afiliado'
+    ? 'SELECT 1 FROM afiliados WHERE usuario = $1'
+    : 'SELECT 1 FROM contas WHERE usuario = $1';
+  q(consultaConta, [norm(req.user.usuario)])
+    .then(({ rows }) => {
+      if (!rows.length) return res.status(401).json({ erro: 'Conta removida. Faça login novamente.' });
+      next();
+    })
+    .catch(next);
+}
+const soAdmin = (req, res, next) =>
+  req.user.perfil === 'admin' ? next() : res.status(403).json({ erro: 'Acesso exclusivo do Administrador.' });
+
+app.get('/api/saude', wrap(async (req, res) => {
+  await q('SELECT 1');
+  res.json({ ok: true, banco: 'conectado' });
+}));
+
+app.get('/api/admin/diagnostico-banco', auth, soAdmin, wrap(async (req, res) => {
+  const nomesTabelas = [
+    'contas', 'afiliados', 'pedidos', 'afiliado_cupons',
+    'vendas_aprovadas', 'config', 'notificacoes_afiliados'
+  ];
+  const [identidade, relacoes] = await Promise.all([
+    q(`SELECT current_database() AS banco, current_schema() AS esquema,
+        current_setting('search_path') AS search_path`),
+    q(`SELECT nome, to_regclass(nome)::text AS relacao
+      FROM unnest($1::text[]) AS tabelas(nome)`, [nomesTabelas])
+  ]);
+  const relacoesPorNome = new Map(relacoes.rows.map(({ nome, relacao }) => [nome, relacao]));
+  const tabelas = {};
+  for (const nome of nomesTabelas) {
+    if (!relacoesPorNome.get(nome)) {
+      tabelas[nome] = { existe: false, linhas: null };
+      continue;
+    }
+    const resultado = await q(`SELECT count(*)::int AS linhas FROM ${nome}`);
+    tabelas[nome] = { existe: true, linhas: resultado.rows[0].linhas };
+  }
+
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    endpoint: new URL(DATABASE_URL).hostname,
+    ...identidade.rows[0],
+    tabelas
+  });
+}));
+
+// Validação segura de persistência no Neon sem bloquear transações válidas
+function exigirUmaLinhaPersistida(resultado, tabela) {
+  if (!resultado || (resultado.rowCount !== null && resultado.rowCount !== undefined && resultado.rowCount < 1) || (resultado.rows && resultado.rows.length === 0)) {
+    throw new Error(`O Neon não confirmou a gravação esperada na tabela ${tabela}.`);
+  }
+}
+
+app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
+  const usuario = normUsuario(req.body.usuario);
+  const nome = txt(req.body.nome, 100), email = txt(req.body.email, 120);
+  const cpf = txt(req.body.cpf, 20), pix = txt(req.body.pix, 100);
+  const telefone = soDigitos(req.body.telefone);
+  const senha = String(req.body.senha || '');
+  const perfil = req.body.perfil || 'cliente';
+
+  if (!['cliente', 'afiliado'].includes(perfil)) return res.status(400).json({ erro: 'Tipo de cadastro inválido.' });
+  if (!RE_USUARIO.test(usuario)) return res.status(400).json({ erro: 'Usuário inválido.' });
+  if (!nome || !semTags(nome)) return res.status(400).json({ erro: 'Informe um nome válido.' });
+  if (!RE_EMAIL.test(email)) return res.status(400).json({ erro: 'Informe um e-mail válido.' });
+  if (!cpf || !RE_CPF.test(cpf)) return res.status(400).json({ erro: 'Informe um CPF válido.' });
+  if (perfil === 'afiliado' && !pix) return res.status(400).json({ erro: 'Informe uma chave Pix.' });
+  if (senha.length < 6) return res.status(400).json({ erro: 'A senha precisa ter pelo menos 6 caracteres.' });
+  if (usuario === ADMIN_USUARIO) return res.status(409).json({ erro: 'Este usuário já existe.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const ex = await client.query('SELECT 1 FROM contas WHERE usuario = $1 UNION SELECT 1 FROM afiliados WHERE usuario = $1', [usuario]);
+    if (ex.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ erro: 'Este usuário já existe.' });
+    }
+
+    const senhaHash = await bcrypt.hash(senha, 10);
+    const pixConta = perfil === 'afiliado' ? pix : '';
+    const contaInserida = await client.query('INSERT INTO contas (usuario, nome, email, cpf, pix, telefone, senha_hash) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING usuario',
+      [usuario, nome, email, cpf, pixConta, telefone, senhaHash]);
+    exigirUmaLinhaPersistida(contaInserida, 'contas');
+
+    if (perfil === 'afiliado') {
+      let patrocinadorId = 'admin', patrocinadorUsuario = null;
+      const refCookie=(()=>{
+        for(const [nome,tipo] of [['uk_convite','convite'],['uk_indicacao','indicacao']]){
+          try{const x=jwt.verify(lerCookieUK(req,nome),JWT_SECRET);if(x.tipo===tipo&&x.exp>Date.now())return x.usuario}catch{}
+        }
+        return null;
+      })();
+      const indicador = normUsuario(refCookie||req.body.indicador);
+      if (indicador && indicador !== 'admin' && indicador !== usuario) {
+        const pai = (await client.query('SELECT id, usuario FROM afiliados WHERE usuario = $1', [indicador])).rows[0];
+        if (pai) {
+          patrocinadorId = pai.id;
+          patrocinadorUsuario = pai.usuario;
+        }
+      }
+      const id = 'AF-' + usuario.toUpperCase();
+      const afiliadoInserido = await client.query(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id)
+                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING usuario`,
+        [id, usuario, nome, email, cpf, pix, telefone, senhaHash, patrocinadorId]);
+      exigirUmaLinhaPersistida(afiliadoInserido, 'afiliados');
+      await client.query('COMMIT');
+      const tokenCadastro=gerarToken(usuario,'afiliado');atribuirCookieLogin(req,res,tokenCadastro);return res.json({
+        token: tokenCadastro,
+        user: dadosUsuario({ usuario, nome, email, cpf, pix, telefone }, 'afiliado'),
+        id, patrocinadorId, patrocinadorUsuario
+      });
+    }
+
+    await client.query('COMMIT');
+    const tokenCadastro=gerarToken(usuario,'cliente');atribuirCookieLogin(req,res,tokenCadastro);res.json({
+      token: tokenCadastro,
+      user: dadosUsuario({ usuario, nome, email, cpf, pix: '', telefone }, 'cliente')
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}));
+
+app.post('/api/login', limitarTentativas, wrap(async (req, res) => {
+  const usuario = normUsuario(req.body.usuario);
+  const senha = String(req.body.senha || '');
+
+  if (usuario === ADMIN_USUARIO && igual(senha, ADMIN_SENHA)) {
+    const tokenAdmin=gerarToken(usuario,'admin');atribuirCookieLogin(req,res,tokenAdmin);return res.json({ token: tokenAdmin, user: { usuario: 'admin', nome: 'Administrador (Central)', perfil: 'admin' } });
+  }
+
+  let r = await q('SELECT * FROM afiliados WHERE usuario = $1', [usuario]);
+  let perfil = 'afiliado';
+  if (!r.rows.length) {
+    r = await q('SELECT * FROM contas WHERE usuario = $1', [usuario]);
+    perfil = 'cliente';
+  }
+  const row = r.rows[0];
+  if (!row || !(await bcrypt.compare(senha, row.senha_hash))) {
+    return res.status(401).json({ erro: 'Usuário ou senha incorretos.' });
+  }
+
+  const flag = (await q('SELECT trocar_senha, temp_expira FROM contas WHERE usuario = $1', [row.usuario])).rows[0] || {};
+  const trocar = !!flag.trocar_senha;
+  if (trocar && flag.temp_expira && new Date(flag.temp_expira) < new Date()) {
+    return res.status(401).json({ erro: 'Senha temporária expirada.' });
+  }
+  const tokenLogin=gerarToken(row.usuario,perfil,trocar);atribuirCookieLogin(req,res,tokenLogin);res.json({ token:tokenLogin, trocarSenha:trocar, user:dadosUsuario(row,perfil) });
+}));
+
+app.post('/api/afiliar', auth, wrap(async (req, res) => {
+  if (req.user.perfil === 'admin') return res.status(403).json({ erro: 'O administrador não precisa se afiliar.' });
+  const usuario = req.user.usuario;
+  const nome = txt(req.body.nome, 100), email = txt(req.body.email, 120);
+  const cpf = txt(req.body.cpf, 20), pix = txt(req.body.pix, 100);
+  const telefone = soDigitos(req.body.telefone);
+
+  if (!nome || !semTags(nome)) return res.status(400).json({ erro: 'Informe um nome válido.' });
+  if (!RE_EMAIL.test(email)) return res.status(400).json({ erro: 'Informe um e-mail válido.' });
+  if (!cpf || !RE_CPF.test(cpf)) return res.status(400).json({ erro: 'Informe um CPF válido.' });
+  if (!pix || !RE_PIX.test(pix)) return res.status(400).json({ erro: 'Informe uma chave Pix válida.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const conta = (await client.query('SELECT senha_hash FROM contas WHERE usuario = $1 FOR UPDATE', [usuario])).rows[0];
+    if (!conta) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ erro: 'Conta não encontrada.' });
+    }
+
+    await client.query('UPDATE contas SET telefone = $2 WHERE usuario = $1', [usuario, telefone]);
+    const existente = (await client.query('SELECT * FROM afiliados WHERE usuario = $1 FOR UPDATE', [usuario])).rows[0];
+
+    if (existente) {
+      await client.query('UPDATE afiliados SET nome=$2, email=$3, cpf=$4, pix=$5, telefone=$6 WHERE usuario=$1', [usuario, nome, email, cpf, pix, telefone]);
+      const patrocinadorUsuario = await usuarioDoPatrocinador(existente.patrocinador_id, client);
+      await client.query('COMMIT');
+      return res.json({ ok: true, id: existente.id, patrocinadorId: existente.patrocinador_id, patrocinadorUsuario });
+    }
+
+    let patrocinadorId = 'admin', patrocinadorUsuario = null;
+    const refCookie=(()=>{
+        for(const [nome,tipo] of [['uk_convite','convite'],['uk_indicacao','indicacao']]){
+          try{const x=jwt.verify(lerCookieUK(req,nome),JWT_SECRET);if(x.tipo===tipo&&x.exp>Date.now())return x.usuario}catch{}
+        }
+        return null;
+      })();
+      const indicador = normUsuario(refCookie||req.body.indicador);
+    if (indicador && indicador !== 'admin' && indicador !== usuario) {
+      const pai = (await client.query('SELECT id, usuario FROM afiliados WHERE usuario = $1', [indicador])).rows[0];
+      if (pai) { patrocinadorId = pai.id; patrocinadorUsuario = pai.usuario; }
+    }
+
+    const id = 'AF-' + usuario.toUpperCase();
+    const afiliadoInserido = await client.query(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING usuario`,
+      [id, usuario, nome, email, cpf, pix, telefone, conta.senha_hash, patrocinadorId]);
+    exigirUmaLinhaPersistida(afiliadoInserido, 'afiliados');
+    await client.query('COMMIT');
+    res.json({ ok: true, id, patrocinadorId, patrocinadorUsuario });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+app.get('/api/patrocinador/:usuario', limitarTentativas, wrap(async (req, res) => {
+  const u = normUsuario(req.params.usuario);
+  if (u === 'admin' || u === ADMIN_USUARIO) return res.json({ usuario: 'admin', nome: 'Central (Administrador)' });
+  const r = await q('SELECT usuario, nome FROM afiliados WHERE usuario = $1 OR lower(id) = $1', [u]);
+  if (!r.rows.length) return res.status(404).json({ erro: 'Patrocinador não encontrado.' });
+  res.json(r.rows[0]);
+}));
+
+app.get('/api/rede', auth, wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const lista = await afiliadosComComissao();
+  const taxas = await lerTaxas();
+  const valorMinimoSaque = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
+  const calendarioSaque = calendarioSaqueHoje();
+
+  if (req.user.perfil === 'admin') {
+    const arvore = arvoreOrdenada(lista).map(a => {
+      const pai = lista.find(p => p !== a && ehFilhoDe(a, p));
+      return {
+        id: a.id, usuario: a.usuario, nome: a.nome, email: a.email, criadoEm: a.criadoEm, nivel: a.nivel,
+        patrocinadorUsuario: pai ? pai.usuario : 'admin', patrocinadorNome: pai ? pai.nome : 'Central (Administrador)',
+        vendasDiretas: a.vendasDiretas, comissaoDireta: a.comissaoDireta, comissaoRede: a.comissaoRede,
+        comissaoTotal: a.comissaoTotal, comissaoCentral: a.comissaoCentral, filhosDiretos: a.filhosDiretos
+      };
+    });
+    const t = (await q(`SELECT count(*)::int AS qtd, COALESCE(sum(valor), 0) AS faturado,
+        COALESCE(sum(comissao), 0) AS vend, COALESCE(sum(comissao_patrocinador), 0) AS pat,
+        COALESCE(sum(comissao_avo), 0) AS avo, COALESCE(sum(comissao_central), 0) AS cen
+      FROM pedidos WHERE status = 'pago'`)).rows[0];
+    return res.json({
+      visao: 'admin', taxas, afiliados: arvore, valorMinimoSaque,
+      calendarioSaque,
+      resumo: {
+        vendasPagas: t.qtd, faturado: dinheiro(t.faturado), comissaoCentral: dinheiro(t.cen),
+        totalADistribuir: dinheiro(Number(t.vend) + Number(t.pat) + Number(t.avo)), totalAfiliados: lista.length,
+        geracoes: arvore.reduce((m, a) => Math.max(m, a.nivel), 0)
+      }
+    });
+  }
+
+  const eu = lista.find(a => a.usuario === req.user.usuario);
+  if (!eu) return res.status(404).json({ erro: 'Você ainda não é afiliado.' });
+  const pai = lista.find(p => p !== eu && ehFilhoDe(eu, p));
+  const ganhos = (await q(`SELECT afiliado_usuario AS u, sum(comissao_patrocinador) AS total
+      FROM pedidos WHERE status = 'pago' AND patrocinador_usuario = $1 GROUP BY 1`, [eu.usuario])).rows;
+  const filhos = lista.filter(f => ehFilhoDe(f, eu)).map(f => ({
+    usuario: f.usuario, nome: f.nome, criadoEm: f.criadoEm, vendas: f.vendasDiretas,
+    minhaComissao: dinheiro((ganhos.find(g => g.u === f.usuario) || {}).total)
+  }));
+  const extrato = (await q(`SELECT pedido_id, produto_nome, data, geracao, valor, situacao
+    FROM (
+      SELECT id AS pedido_id, produto_nome, pago_em AS data, 'Direta' AS geracao,
+        comissao AS valor, status_comissao_direta AS situacao
+      FROM pedidos
+      WHERE status = 'pago' AND afiliado_usuario = $1 AND comissao > 0
+      UNION ALL
+      SELECT id AS pedido_id, produto_nome, pago_em AS data, 'Pai' AS geracao,
+        comissao_patrocinador AS valor, status_comissao_patrocinador AS situacao
+      FROM pedidos
+      WHERE status = 'pago' AND patrocinador_usuario = $1 AND comissao_patrocinador > 0
+      UNION ALL
+      SELECT id AS pedido_id, produto_nome, pago_em AS data, 'Avô' AS geracao,
+        comissao_avo AS valor, status_comissao_avo AS situacao
+      FROM pedidos
+      WHERE status = 'pago' AND avo_usuario = $1 AND comissao_avo > 0
+    ) comissoes
+    ORDER BY data DESC NULLS LAST, pedido_id DESC`, [eu.usuario])).rows.map(item => ({
+    pedidoId: item.pedido_id,
+    produtoNome: item.produto_nome,
+    data: item.data,
+    geracao: item.geracao,
+    valor: dinheiro(item.valor),
+    situacao: item.situacao
+  }));
+  res.json({
+    visao: 'afiliado', taxas, filhos, extrato, valorMinimoSaque,
+    calendarioSaque,
+    eu: {
+      id: eu.id, usuario: eu.usuario, nome: eu.nome, vendasDiretas: eu.vendasDiretas, vendasRede: eu.vendasRede,
+      comissaoDireta: eu.comissaoDireta, comissaoRede: eu.comissaoRede, comissaoTotal: eu.comissaoTotal,
+      comissaoPendente: eu.comissaoPendente, comissaoLiberar: eu.comissaoLiberar,
+      filhosDiretos: eu.filhosDiretos, patrocinadorNome: pai ? pai.nome : 'Central (Administrador)'
+    }
+  });
+}));
+
+async function configuracaoCupons() {
+  const [ativo, percentualMaximo] = await Promise.all([
+    lerConfig('cupom_global_ativo', false),
+    lerConfig('cupom_porcentagem_maxima', 0)
+  ]);
+  return { ativo: ativo === true, percentualMaximo: Number(percentualMaximo) || 0 };
+}
+
+app.get('/api/admin/cupons', auth, soAdmin, wrap(async (req, res) => {
+  const configuracao = await configuracaoCupons();
+  const afiliados = await q(`SELECT a.id, a.usuario, a.nome, c.id AS cupom_id,
+      c.codigo_cupom, c.ativo AS cupom_ativo, c.data_validade,
+      (c.data_validade IS NOT NULL AND c.data_validade < CURRENT_DATE) AS expirado,
+      c.atualizado_em
+    FROM afiliados a LEFT JOIN afiliado_cupons c ON c.afiliado_usuario = a.usuario
+    ORDER BY a.nome, a.usuario`);
+  res.json({ ...configuracao, afiliados: afiliados.rows.map(a => ({
+    id: a.id, usuario: a.usuario, nome: a.nome, cupomId: a.cupom_id,
+    codigo: a.codigo_cupom, ativo: a.cupom_ativo === true, expirado: a.expirado === true,
+    dataValidade: dataIso(a.data_validade), atualizadoEm: a.atualizado_em
+  })) });
+}));
+
+app.put('/api/admin/cupons/config', auth, soAdmin, wrap(async (req, res) => {
+  const { ativo } = req.body;
+  const percentualMaximo = Number(req.body.percentualMaximo);
+  if (typeof ativo !== 'boolean' || !Number.isFinite(percentualMaximo) || percentualMaximo < 0 || percentualMaximo > 100) {
+    return res.status(400).json({ erro: 'Informe um percentual de cupom entre 0% e 100%.' });
+  }
+  await gravarConfig('cupom_global_ativo', ativo);
+  await gravarConfig('cupom_porcentagem_maxima', percentualMaximo);
+  res.json({ ok: true, ativo, percentualMaximo });
+}));
+
+app.patch('/api/admin/cupons/:id', auth, soAdmin, wrap(async (req, res) => {
+  const atualizaAtivo = Object.prototype.hasOwnProperty.call(req.body, 'ativo');
+  const atualizaValidade = Object.prototype.hasOwnProperty.call(req.body, 'dataValidade');
+  const dataValidade = atualizaValidade && req.body.dataValidade ? String(req.body.dataValidade) : null;
+  const dataValidadeParsed = dataValidade && /^\d{4}-\d{2}-\d{2}$/.test(dataValidade)
+    ? new Date(`${dataValidade}T00:00:00.000Z`)
+    : null;
+  if (dataValidade && (!dataValidadeParsed || Number.isNaN(dataValidadeParsed.getTime())
+    || dataValidadeParsed.toISOString().slice(0, 10) !== dataValidade)) {
+    return res.status(400).json({ erro: 'Informe a validade no formato AAAA-MM-DD.' });
+  }
+
+  const result = await q(`UPDATE afiliado_cupons
+    SET ativo = COALESCE($2, ativo),
+        data_validade = CASE WHEN $3 THEN $4::date ELSE data_validade END,
+        atualizado_em = now()
+    WHERE id = $1
+    RETURNING id, ativo, data_validade, (data_validade IS NOT NULL AND data_validade < CURRENT_DATE) AS expirado`,
+  [req.params.id, atualizaAtivo ? req.body.ativo : null, atualizaValidade, dataValidade]);
+  if (!result.rows.length) return res.status(404).json({ erro: 'Cupom não encontrado.' });
+  res.json({ ok: true, ...result.rows[0], data_validade: dataIso(result.rows[0].data_validade) });
+}));
+
+app.get('/api/afiliado/cupom', auth, wrap(async (req, res) => {
+  if (req.user.perfil !== 'afiliado') return res.status(403).json({ erro: 'Acesso exclusivo.' });
+  const [configuracao, result] = await Promise.all([
+    configuracaoCupons(),
+    q(`SELECT id, codigo_cupom, ativo, data_validade, (data_validade IS NOT NULL AND data_validade < CURRENT_DATE) AS expirado
+      FROM afiliado_cupons WHERE afiliado_usuario = $1`, [req.user.usuario])
+  ]);
+  const cupom = result.rows[0];
+  res.json({ ...configuracao, cupom: cupom ? { id: cupom.id, codigo: cupom.codigo_cupom, ativo: cupom.ativo, dataValidade: dataIso(cupom.data_validade), expirado: cupom.expirado } : null });
+}));
+
+app.put('/api/afiliado/cupom', auth, wrap(async (req, res) => {
+  if (req.user.perfil !== 'afiliado') return res.status(403).json({ erro: 'Acesso exclusivo.' });
+  const { ativo, percentualMaximo } = await configuracaoCupons();
+  if (!ativo || percentualMaximo <= 0) return res.status(403).json({ erro: 'Campanha de cupons desativada.' });
+  const codigo = txt(req.body.codigo, 50).toUpperCase().replace(/\s+/g, '-');
+
+  const result = await q(`INSERT INTO afiliado_cupons (afiliado_usuario, codigo_cupom)
+    VALUES ($1, $2)
+    ON CONFLICT (afiliado_usuario) DO UPDATE SET codigo_cupom = EXCLUDED.codigo_cupom, atualizado_em = now()
+    RETURNING id, codigo_cupom, ativo`,
+  [req.user.usuario, codigo]);
+  res.json({ ok: true, cupom: { id: result.rows[0].id, codigo: result.rows[0].codigo_cupom, ativo: result.rows[0].ativo } });
+}));
+
+app.get('/api/afiliado/notificacoes', auth, wrap(async (req, res) => {
+  if (req.user.perfil !== 'afiliado') return res.status(403).json({ erro: 'Acesso exclusivo.' });
+  const afiliado = (await q('SELECT nome FROM afiliados WHERE usuario = $1', [req.user.usuario])).rows[0];
+  if (!afiliado) return res.status(404).json({ erro: 'Afiliado não encontrado.' });
+  const notificacoes = await q('SELECT id, titulo, mensagem, data_criacao FROM notificacoes_afiliados WHERE ativa = true ORDER BY data_criacao DESC');
+  const nome = txt(afiliado.nome, 100);
+  const primeiroNome = nome.split(/\s+/)[0] || nome;
+  res.json(notificacoes.rows.map(n => ({
+    id: n.id, titulo: n.titulo,
+    mensagem: n.mensagem.replace(/\{nome\}/gi, nome).replace(/\{primeiro_nome\}/gi, primeiroNome),
+    dataCriacao: n.data_criacao
+  })));
+}));
+
+app.get('/api/admin/notificacoes', auth, soAdmin, wrap(async (req, res) => {
+  const result = await q('SELECT id, titulo, mensagem, data_criacao, ativa FROM notificacoes_afiliados ORDER BY data_criacao DESC');
+  res.json(result.rows);
+}));
+
+app.post('/api/admin/notificacoes', auth, soAdmin, wrap(async (req, res) => {
+  const titulo = txt(req.body.titulo, 255), mensagem = txt(req.body.mensagem, 10000);
+  if (!titulo || !mensagem) return res.status(400).json({ erro: 'Informe título e mensagem.' });
+  const result = await q('INSERT INTO notificacoes_afiliados (titulo, mensagem) VALUES ($1, $2) RETURNING id, titulo, mensagem, data_criacao, ativa', [titulo, mensagem]);
+  res.status(201).json(result.rows[0]);
+}));
+
+app.patch('/api/admin/notificacoes/:id', auth, soAdmin, wrap(async (req, res) => {
+  const result = await q('UPDATE notificacoes_afiliados SET ativa = $2 WHERE id = $1 RETURNING id, ativa', [req.params.id, req.body.ativa]);
+  res.json({ ok: true, ...result.rows[0] });
+}));
+
+app.delete('/api/admin/notificacoes/:id', auth, soAdmin, wrap(async (req, res) => {
+  await q('DELETE FROM notificacoes_afiliados WHERE id = $1', [req.params.id]);
+  res.json({ ok: true });
+}));
+
+const { filtrarCatalogoPublicoCJ } = require('./cj-publicacao-segura');
+// O catálogo publicado fica em config.produtos, separado de importacao_urls.
+async function lerCatalogoSincronizado() {
+  const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
+  if (!Array.isArray(produtos)) return produtos;
+  const ids = [...new Set(produtos.map(p => {
+    if (p?.importacaoUrlId != null) return Number(p.importacaoUrlId);
+    const match = /^garimpagem-(\d+)$/.exec(String(p?.id ?? ''));
+    return match ? Number(match[1]) : null;
+  }).filter(id => Number.isSafeInteger(id) && id > 0))];
+  if (!ids.length) return produtos;
+  const existentes = await q('SELECT id, dados_extraidos FROM importacao_urls WHERE id = ANY($1::bigint[])', [ids]);
+  const ativos = new Set(existentes.rows.filter(r => r.dados_extraidos?.desativado_vitrine !== true).map(r => String(r.id)));
+  return produtos.filter(p => {
+    const match = /^garimpagem-(\d+)$/.exec(String(p?.id ?? ''));
+    const id = p?.importacaoUrlId != null ? Number(p.importacaoUrlId) : match ? Number(match[1]) : null;
+    return id == null || !Number.isSafeInteger(id) || ativos.has(String(id));
+  });
+}
+
+async function lerCatalogoPublico() {
+  return filtrarCatalogoPublicoCJ(pool, await lerCatalogoSincronizado());
+}
+
+// ----- Checkout UK -----
+app.get('/api/produtos', wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(await lerCatalogoPublico());
+}));
+
+// VITRINE UK: rotas independentes; checkout e afiliados permanecem inalterados.
+// Identidade, sacola central, referências e recuperação de senha.
+app.use('/api/uk', require('./uk-central-routes')({pool,auth,soAdmin,jwtSecret:JWT_SECRET,limitarTentativas,adminUsuario:ADMIN_USUARIO}));
+app.use('/api/vitrine', require('./vitrine-routes')({ pool, auth, soAdmin, lerCatalogoPublico }));
+
+// CHECKOUT UK (módulo novo de homologação; NÃO substitui o checkout legado).
+app.use('/api/checkout-uk', require('./checkout-uk-routes')({ pool, auth, lerCatalogoPublico }));
+
+app.get('/api/admin/produtos', auth, soAdmin, wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(await lerCatalogoSincronizado());
+}));
+
+app.put('/api/produtos', auth, soAdmin, wrap(async (req, res) => {
+  await gravarConfig('produtos', req.body);
+  res.json({ ok: true });
+}));
+
+app.get('/api/config', wrap(async (req, res) => {
+  res.json({
+    ...(await lerTaxas()),
+    valorMinimoSaque: Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO)),
+    calendarioSaque: calendarioSaqueHoje(),
+    whatsappSuporte: String(await lerConfig('whatsappSuporte', ''))
+  });
+}));
+
+app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
+  const chavesTaxa = ['taxaComissao', 'taxaPatrocinador', 'taxaAvo'];
+  const novasTaxas = {};
+  for (const chave of chavesTaxa) {
+    if (req.body[chave] === undefined) continue;
+    const valor = Number(req.body[chave]);
+    if (!Number.isFinite(valor) || valor < 0 || valor > 100) {
+      return res.status(400).json({ erro: 'Informe cada comissão entre 0% e 100%.' });
+    }
+    novasTaxas[chave] = valor;
+  }
+  const taxasAtuais = await lerTaxas();
+  const taxasFinais = {
+    taxaComissao: novasTaxas.taxaComissao ?? taxasAtuais.taxaComissao,
+    taxaPatrocinador: novasTaxas.taxaPatrocinador ?? taxasAtuais.taxaPatrocinador,
+    taxaAvo: novasTaxas.taxaAvo ?? taxasAtuais.taxaAvo
+  };
+  if (Object.keys(novasTaxas).length
+    && taxasFinais.taxaComissao + taxasFinais.taxaPatrocinador + taxasFinais.taxaAvo > 100) {
+    return res.status(400).json({ erro: 'A soma das comissões não pode ultrapassar 100%.' });
+  }
+
+  let valorMinimo;
+  if (req.body.valorMinimoSaque !== undefined) {
+    valorMinimo = Number(req.body.valorMinimoSaque);
+    if (!Number.isFinite(valorMinimo) || valorMinimo < 0) {
+      return res.status(400).json({ erro: 'Informe um valor mínimo de saque válido.' });
+    }
+  }
+
+  for (const [chave, valor] of Object.entries(novasTaxas)) await gravarConfig(chave, valor);
+  if (valorMinimo !== undefined) await gravarConfig('valorMinimoSaque', valorMinimo);
+  if (req.body.whatsappSuporte !== undefined) await gravarConfig('whatsappSuporte', req.body.whatsappSuporte);
+  res.json({
+    ok: true,
+    ...(await lerTaxas()),
+    valorMinimoSaque: Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO))
+  });
+}));
+
+app.get('/api/admin/contas', auth, soAdmin, wrap(async (req, res) => {
+  const r = await q('SELECT c.usuario, c.nome, c.email, c.cpf, c.telefone, c.criado_em, (a.usuario IS NOT NULL) AS afiliado FROM contas c LEFT JOIN afiliados a ON a.usuario = c.usuario LIMIT 50');
+  res.json(r.rows.map(c => ({ ...c, whatsapp: c.telefone ? paraWhatsApp(c.telefone) : '' })));
+}));
+
+app.get('/api/afiliados', auth, soAdmin, wrap(async (req, res) => {
+  res.json(await afiliadosComComissao());
+}));
+
+async function liquidarComissoesAfiliado(client, usuario, valorMinimo, dataLimite) {
+  const pendentes = await client.query(`SELECT COALESCE(sum(valor), 0) AS total
+    FROM (
+      SELECT comissao AS valor FROM pedidos
+      WHERE status = 'pago' AND status_comissao_direta = 'PENDENTE'
+        AND afiliado_usuario = $1 AND pago_em < $2 AND comissao > 0
+      UNION ALL
+      SELECT comissao_patrocinador AS valor FROM pedidos
+      WHERE status = 'pago' AND status_comissao_patrocinador = 'PENDENTE'
+        AND patrocinador_usuario = $1 AND pago_em < $2 AND comissao_patrocinador > 0
+      UNION ALL
+      SELECT comissao_avo AS valor FROM pedidos
+      WHERE status = 'pago' AND status_comissao_avo = 'PENDENTE'
+        AND avo_usuario = $1 AND pago_em < $2 AND comissao_avo > 0
+    ) comissoes`, [usuario, dataLimite]);
+  const totalElegivel = dinheiro(pendentes.rows[0].total);
+  if (totalElegivel <= 0 || totalElegivel < valorMinimo) {
+    return { elegivel: totalElegivel, quantidade: 0, valorPago: 0 };
+  }
+
+  const baixadas = await client.query(`WITH elegiveis AS (
+      SELECT id,
+        CASE WHEN afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE' AND comissao > 0
+          THEN comissao ELSE 0 END AS direta,
+        CASE WHEN patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE' AND comissao_patrocinador > 0
+          THEN comissao_patrocinador ELSE 0 END AS patrocinador,
+        CASE WHEN avo_usuario = $1 AND status_comissao_avo = 'PENDENTE' AND comissao_avo > 0
+          THEN comissao_avo ELSE 0 END AS avo
+      FROM pedidos
+      WHERE status = 'pago' AND pago_em < $2 AND (
+        (afiliado_usuario = $1 AND status_comissao_direta = 'PENDENTE' AND comissao > 0)
+        OR (patrocinador_usuario = $1 AND status_comissao_patrocinador = 'PENDENTE' AND comissao_patrocinador > 0)
+        OR (avo_usuario = $1 AND status_comissao_avo = 'PENDENTE' AND comissao_avo > 0)
+      )
+      FOR UPDATE
+    ), baixadas AS (
+      UPDATE pedidos p SET
+        status_comissao_direta = CASE WHEN e.direta > 0 THEN 'PAGO' ELSE p.status_comissao_direta END,
+        data_pagamento_comissao_direta = CASE WHEN e.direta > 0 THEN now() ELSE p.data_pagamento_comissao_direta END,
+        status_comissao_patrocinador = CASE WHEN e.patrocinador > 0 THEN 'PAGO' ELSE p.status_comissao_patrocinador END,
+        data_pagamento_comissao_patrocinador = CASE WHEN e.patrocinador > 0 THEN now() ELSE p.data_pagamento_comissao_patrocinador END,
+        status_comissao_avo = CASE WHEN e.avo > 0 THEN 'PAGO' ELSE p.status_comissao_avo END,
+        data_pagamento_comissao_avo = CASE WHEN e.avo > 0 THEN now() ELSE p.data_pagamento_comissao_avo END
+      FROM elegiveis e
+      WHERE p.id = e.id
+      RETURNING e.direta, e.patrocinador, e.avo
+    )
+    SELECT direta, patrocinador, avo FROM baixadas`,
+  [usuario, dataLimite]);
+
+  let valorPago = 0;
+  let quantidade = 0;
+  for (const baixa of baixadas.rows) {
+    for (const valor of [baixa.direta, baixa.patrocinador, baixa.avo]) {
+      if (Number(valor) > 0) {
+        valorPago += Number(valor);
+        quantidade++;
+      }
+    }
+  }
+  return { elegivel: totalElegivel, quantidade, valorPago: dinheiro(valorPago) };
+}
+
+app.post('/api/admin/afiliados/liquidar-lote', auth, soAdmin, wrap(async (req, res) => {
+  const valorMinimo = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
+  const dataLimite = dataInicioMesBrasil();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const afiliados = await client.query('SELECT usuario FROM afiliados ORDER BY usuario FOR UPDATE');
+    let afiliadosLiquidados = 0;
+    let quantidade = 0;
+    let valorPago = 0;
+
+    for (const afiliado of afiliados.rows) {
+      const resultado = await liquidarComissoesAfiliado(client, afiliado.usuario, valorMinimo, dataLimite);
+      if (resultado.quantidade > 0) afiliadosLiquidados++;
+      quantidade += resultado.quantidade;
+      valorPago += resultado.valorPago;
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, afiliadosLiquidados, quantidade, valorPago: dinheiro(valorPago) });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) => {
+  const valorMinimo = Number(await lerConfig('valorMinimoSaque', VALOR_MINIMO_SAQUE_PADRAO));
+  const dataLimite = dataInicioMesBrasil();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const afiliado = await client.query('SELECT usuario FROM afiliados WHERE id = $1 FOR UPDATE', [req.params.id]);
+    if (!afiliado.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ erro: 'Afiliado não encontrado.' });
+    }
+
+    const resultado = await liquidarComissoesAfiliado(client, afiliado.rows[0].usuario, valorMinimo, dataLimite);
+    if (resultado.elegivel > 0 && resultado.elegivel < valorMinimo) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ erro: `O saldo elegível está abaixo do mínimo de R$ ${valorMinimo.toFixed(2)}.` });
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, quantidade: resultado.quantidade, valorPago: resultado.valorPago });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+app.delete('/api/afiliados/:id', auth, soAdmin, wrap(async (req, res) => {
+  await q('DELETE FROM afiliados WHERE id = $1', [req.params.id]);
+  res.json({ ok: true });
+}));
+
+app.delete('/api/admin/contas/:usuario', auth, soAdmin, wrap(async (req, res) => {
+  const usuario = norm(req.params.usuario);
+  await q('DELETE FROM contas WHERE usuario = $1', [usuario]);
+  await q('DELETE FROM afiliados WHERE usuario = $1', [usuario]);
+  res.json({ ok: true });
+}));
+
+// Fila de URLs: apenas registra e acompanha importação. Não publica produtos sem dados verificados.
+const bulkImport = require('./bulk-import-routes');
+app.use('/api/admin/importacao', auth, soAdmin, bulkImport(pool));
+// Aprovação manual: somente administrador, sem publicação automática.
+app.use('/api/admin/publicacao', auth, soAdmin, require('./aprovacao-manual-routes')(pool));
+// Publicação e atualização automáticas, com configuração persistente no Neon.
+app.use('/api/admin/automacao', auth, soAdmin, require('./automacao-cronjob')(pool));
+app.use('/api/admin/precificacao', auth, soAdmin, require('./precificacao-central').createPricing(pool));
+
+// Integração oficial CJ Dropshipping (isolada da Garimpagem AliExpress).
+app.use('/api/admin/cj', auth, soAdmin, require('./cj-dropshipping-routes')(pool));
+
+// Canal separado para a Garimpagem local: chave de serviço, nunca JWT de cliente.
+// A chave fica somente nas variáveis do Render e no computador do operador.
+const { timingSafeEqual } = require('crypto');
+function autenticarGarimpagem(req, res, next) {
+  const expected = process.env.GARIMPAGEM_API_KEY || '';
+  const provided = req.get('X-Garimpagem-Key') || '';
+  if (expected.length < 32 || provided.length > 512 || !provided) {
+    return res.status(401).json({ erro: 'Chave de integração ausente ou não configurada.' });
+  }
+  const a = Buffer.from(expected, 'utf8');
+  const b = Buffer.from(provided, 'utf8');
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return res.status(401).json({ erro: 'Chave de integração inválida.' });
+  }
+  req.user = { usuario: 'garimpagem_local', perfil: 'integracao' };
+  next();
+}
+const rotasGarimpagem = bulkImport(pool);
+app.use('/api/garimpagem', autenticarGarimpagem, (req, res, next) => {
+  if (req.method !== 'POST' || !['/lotes', '/captura-local'].includes(req.path)) {
+    return res.status(404).json({ erro: 'Rota indisponível para integração.' });
+  }
+  next();
+}, rotasGarimpagem);
+
+app.use('/api', (req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
+app.use((err, req, res, next) => {
+  console.error(`Erro na API ${req.method} ${req.originalUrl}:`, err);
+  res.status(500).json({ erro: 'Erro interno no servidor. Tente novamente.' });
+});
+
+const PORT = process.env.PORT || 3000;
+iniciarBanco()
+  .then(async () => {
+    app.listen(PORT, () => console.log(`Uti Like rodando na porta ${PORT}`));
+  })
+  .catch(e => { console.error('ERRO NO NEON:', e); process.exit(1); });

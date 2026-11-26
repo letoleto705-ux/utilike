@@ -1,0 +1,173 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Uti Like — CJ Dropshipping</title><style>
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:#f3f6fb;color:#172b4d}header{background:#102f70;color:#fff;padding:18px}header a{color:white}main{max-width:1200px;margin:auto;padding:16px}.panel{background:white;border:1px solid #dce4ef;border-radius:13px;padding:18px;margin-bottom:16px}h2{margin:0 0 12px}p{line-height:1.55}button{border:0;background:#102f70;color:white;padding:10px 14px;border-radius:8px;cursor:pointer;margin:4px 4px 4px 0}button:disabled{opacity:.5}input,select{padding:9px;border:1px solid #bac8dc;border-radius:7px;max-width:100%}label{display:block;margin:9px 0;font-weight:600}.row{display:flex;gap:15px;flex-wrap:wrap;align-items:end}.row>label{flex:1;min-width:155px}.row input,.row select{display:block;width:100%;margin-top:5px}.categories{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px;max-height:280px;overflow:auto;border:1px solid #e1e8f1;padding:10px;border-radius:8px}.categories label{font-weight:400;margin:0;display:flex;gap:8px;align-items:start}.categories input{margin-top:3px}small,.muted{color:#5d6b82}.scroll{overflow:auto}table{border-collapse:collapse;width:100%;min-width:880px}td,th{padding:10px;border-bottom:1px solid #e5eaf1;text-align:left;font-size:12px;vertical-align:top}td button{padding:7px;font-size:12px}.status{white-space:pre-wrap;background:#f5f8fc;border-radius:8px;padding:10px;min-height:30px}.review{background:#fff7e9;border:1px solid #f2d5a1;border-radius:8px;padding:12px;margin:12px 0}#reviewArea[hidden]{display:none}
+
+/* Filtro Inteligente CJ — visual integrado à Central Cronjob */
+.fi-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.fi-hint{background:#eff6ff;border:1px solid #cbdff7;border-radius:9px;padding:11px;margin:11px 0;color:#305377}
+.fi-grid{display:grid;grid-template-columns:repeat(5,minmax(145px,1fr));gap:10px;align-items:end}
+.fi-grid input,.fi-grid select{display:block;width:100%;margin-top:6px}
+.fi-stats{display:flex;gap:9px;flex-wrap:wrap;margin:13px 0}
+.fi-stats>div{background:#eef4fd;border-radius:9px;padding:10px 12px;flex:1;min-width:125px}
+.fi-stats span{font-size:11px;color:#526881;display:block}.fi-stats b{font-size:18px}
+.fi-table{width:100%;min-width:1020px} .fi-table th{background:#eef4fc;font-size:12px} .fi-table td{font-size:12px;vertical-align:middle}
+.fi-product{display:flex;gap:11px;align-items:center;min-width:230px}.fi-thumb{width:60px;height:64px;border-radius:10px;object-fit:cover;border:1px solid #e1e9f4;flex-shrink:0;background:#e9f0f8}
+.fi-thumb-fallback{display:flex;align-items:center;justify-content:center;font-size:26px}.fi-product strong{display:block;line-height:1.35}.fi-product small{display:block}.fi-product a{display:inline-block;margin-top:4px} .fi-product a{display:inline-block;margin-top:5px;color:#125ea6}
+.fi-money{font-weight:700;white-space:nowrap}.fi-input{max-width:100px;width:100%;border:1px solid #a6bcd6;border-radius:7px;padding:9px 6px}
+.fi-actions{display:flex;align-items:center;gap:7px}.fi-ok,.fi-no{font-size:18px;min-width:36px;padding:6px;border:1px solid #8bc5a1;background:#e9f9ef;color:#167844}
+.fi-no{background:#fff0f1;color:#b83a45;border-color:#e9a9ae} .fi-chosen{border:2px solid #10864f;font-weight:850}.fi-denied{border:2px solid #ba3440}
+.fi-muted{font-size:11px;color:#67768a}.fi-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.fi-configuration{display:flex;flex-wrap:wrap;gap:6px}.fi-configuration span{background:#f0f5fb;padding:7px 9px;border-radius:8px;font-size:12px}
+.fi-msg{white-space:pre-line;font-size:13px;line-height:1.5;margin-top:10px}
+.fi-legacy{border:1px solid #dce4ef;background:white;border-radius:12px;margin-bottom:16px;padding:5px 12px}
+.fi-legacy>summary{cursor:pointer;padding:12px 5px;font-weight:800;color:#1f4273}
+@media(max-width:760px){.fi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.fi-head h2{font-size:17px}.fi-table{min-width:920px}}
+@media(max-width:460px){.fi-grid{grid-template-columns:1fr}.fi-stats>div{min-width:110px}}
+</style></head><body><header><h1>Uti Like — CJ Dropshipping</h1><a href="cronjob.html">Central Cronjob</a> · <a href="index.html">Vitrine</a></header><main>
+
+<section class="panel" id="filtroInteligenteCJ" style="border:2px solid #1d68b2">
+  <div class="fi-head"><div><h2>🔎 Filtro Inteligente · Seleção por produto</h2>
+  <p class="muted">Pesquise na CJ, compare custos e aprove cada produto com sua própria margem.</p></div>
+  <strong style="color:#145ca8">CJ → Análise → Neon → PT-BR → Vitrine</strong></div>
+  <p class="fi-hint"><strong>Controle de publicação:</strong> pesquisar não importa produtos. O ✓ registra a aprovação comercial e importa somente o selecionado para o Neon. A vitrine exige também tradução PT-BR aprovada. O ✕ registra a rejeição. Produtos já publicados são preservados sem alterar a margem ou o preço até sua nova revisão individual.</p>
+  <div class="fi-grid">
+    <label>Buscar na CJ (inglês)<input id="fiPalavra" type="search" placeholder="Ex.: kitchen organizer"></label>
+    <label>Custo máximo CJ (USD)<input id="fiMaxUSD" type="number" min="0" step="0.01" placeholder="Sem limite"></label>
+    <label>Quantidade por categoria<input id="fiQuantidade" type="number" min="1" max="30" value="10"></label>
+    <label>Página da busca<input id="fiPaginaCJ" type="number" min="1" max="1000" value="1"></label>
+    <label>Origem do estoque<select id="fiOrigem"><option value="all">Todas / não informadas</option><option value="BR">Somente Brasil confirmado</option><option value="preferBR">Brasil confirmado primeiro</option><option value="unknown">Não confirmado</option></select></label>
+    <label>Preço máximo vitrine (R$)<input id="fiTeto" type="number" min="0" step="0.01" placeholder="Sem limite"></label>
+  </div>
+  <div class="fi-tools" style="margin-top:11px"><div><button id="fiPesquisar" type="button" style="background:#1365b1">🔍 Consultar produtos</button> <span class="fi-muted">As categorias marcadas abaixo também serão usadas na consulta.</span></div><span id="fiCambio">Câmbio: aguardando</span></div>
+  <div class="fi-stats"><div><span>Produtos encontrados</span><b id="fiEncontrados">0</b></div><div><span>Aprovados nesta consulta</span><b id="fiAprovados">0</b></div><div><span>Rejeitados nesta consulta</span><b id="fiRejeitados">0</b></div></div>
+  <div class="scroll"><table class="fi-table"><thead><tr><th>Produto / link CJ</th><th>Estoque / frete</th><th>Custo USD</th><th>Custo BRL</th><th>Margem individual (%)</th><th>Preço vitrine</th><th>Publicar?</th></tr></thead><tbody id="fiLinhas"><tr><td colspan="7" style="padding:20px">Clique em Consultar produtos. Nenhuma consulta à CJ foi feita nesta área ainda.</td></tr></tbody></table></div>
+  <div class="fi-tools" style="margin-top:12px"><span class="fi-muted" id="fiPaginacao">Nenhum resultado</span><span><button type="button" id="fiAnterior" style="background:#e9f0fa;color:#1f4d86">← Anterior</button><button type="button" id="fiProxima" style="background:#e9f0fa;color:#1f4d86">Próxima →</button></span></div>
+  <div id="fiMensagem" class="fi-msg" role="status" aria-live="polite"></div>
+  <details style="margin-top:12px"><summary style="font-weight:750;cursor:pointer">Regras da Precificação Central utilizadas (somente leitura)</summary><div id="fiRegras" class="fi-configuration" style="margin-top:8px">Carregando regras...</div><p class="fi-muted">O frete embutido é uma regra financeira, não uma cotação logística da CJ. O preço pode mudar com o câmbio e custos.</p></details>
+</section>
+<details class="fi-legacy"><summary>Ferramentas existentes: categorias, tradução, variantes e agendamento da CJ</summary>
+<section class="panel"><h2>Categorias oficiais da CJ</h2><p>As buscas usam IDs oficiais da CJ (em inglês). As categorias da vitrine são organizadas em português. Selecione uma ou mais; o limite inicial é de 20 por execução para preservar os pontos da API.</p><button id="buscarCategorias">Carregar categorias da CJ</button><button id="todas">Selecionar as visíveis</button><button id="limpar">Desmarcar todas</button><label>Filtrar categorias <input id="filtro" placeholder="Nome em inglês ou grupo em português" style="width:100%"></label><p id="contagem" class="muted">Nenhuma categoria selecionada.</p><div id="categorias" class="categories">Clique em Carregar categorias da CJ.</div></section>
+<section class="panel" id="painelSincronizacaoPTBR" style="border:2px solid #14874e;background:#f5fff9">
+<h2>✅ Etapa 7.1 — Sincronizar traduções PT-BR aprovadas</h2>
+<p>Os produtos que o Robô Tradutor já gravou no Neon com tradução aprovada podem ser enviados à vitrine <strong>sem importar novamente da CJ</strong>. Somente produtos com título PT-BR aprovado, preço e imagem válidos entram na loja.</p>
+<button id="sincronizarPtbr" type="button" style="background:#14874e;font-weight:800;padding:13px 19px">Sincronizar aprovados PT-BR com a vitrine</button>
+<p id="estadoIntegracaoPtbr" class="muted" aria-live="polite">Verificando integração da Etapa 7 no Render...</p>
+<p id="resultadoSincronizacaoPtbr" class="status" aria-live="polite">Aguardando sincronização. Não é necessário importar novos produtos para recuperar os já traduzidos.</p>
+</section>
+<section class="panel"><h2>Importação e publicação após aprovação PT-BR</h2><div class="row"><label>Palavra-chave em inglês (opcional quando há categorias)<input id="palavra" placeholder="Ex.: smart watch"></label><label>Produtos por categoria (quantidade desejada)<input id="quantidade" type="number" value="5" min="1"></label><label>Página CJ<input id="pagina" type="number" value="1" min="1" max="1000"></label></div><button id="importar">Importar para Neon (aguardar PT-BR)</button><button id="atualizar">Atualizar situação</button><button id="cambioAtualizar">Consultar câmbio agora</button><p id="msg" class="status" aria-live="polite">Aguardando.</p><small>Preços convertidos via AwesomeAPI. Frete do Markup é estimativa interna; cotação CJ para o Brasil é feita separadamente por variante. Não confundir com valor final de entrega.</small></section>
+<section class="panel"><h2>Produtos CJ registrados no Neon</h2><p><strong>Retirar da vitrine</strong> desativa e impede a republicação automática. <strong>Reativar</strong> volta para revisão até nova importação. A exclusão física fica reservada a uma etapa futura para preservar o bloqueio.</p><p>Produtos com preço em faixa ficam para revisão. Use “Variantes” para escolher uma versão com preço confirmado.</p><div class="scroll"><table><thead><tr><th>Produto</th><th>SKU</th><th>USD</th><th>BRL</th><th>Status</th><th>Tradução PT-BR</th><th>Motivo</th><th>Ações</th></tr></thead><tbody id="itens"></tbody></table></div><div id="reviewArea" class="review" hidden><h3 id="reviewTitle">Revisar variante</h3><div id="variantes"></div><p id="freteStatus" class="muted"></p><button id="fecharReview">Fechar revisão</button></div></section>
+<section class="panel"><h2>Atualização automática CJ + dólar</h2><p>O agendamento usa as categorias marcadas acima e a quantidade por categoria. Cada execução busca os produtos dessas categorias. O Render precisa estar ativo para executar no horário. Produtos de outras buscas não são reprecificados.</p><label><input type="checkbox" id="cjAtivo"> Ativar automação CJ</label><div class="row"><label>Intervalo (horas)<select id="cjHoras"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>10</option><option>12</option><option>18</option><option>20</option><option selected>24</option></select></label></div><button id="cjSalvar">Salvar agendamento com categorias selecionadas</button><button id="cjAgora">Atualizar produtos agora</button><p id="cjStatus" class="status" aria-live="polite"></p></section>
+</details>
+</main><script>
+const $=id=>document.getElementById(id);let cats=[],selected=new Set(),pendingSchedule=null;
+function token(){return 'cookie'}
+async function api(path,opts={}){const t=token();if(!t)throw Error('Entre como administrador pela vitrine, nesta aba.');const r=await fetch('/api/admin/cj'+path,{...opts,headers:{Authorization:'Bearer '+t,'Content-Type':'application/json',...(opts.headers||{})},cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.erro||d.message||'HTTP '+r.status);return d}
+function payload(){return {palavra:$('palavra').value.trim(),categorias:[...selected],quantidade:Number($('quantidade').value),pagina:Number($('pagina').value)}}
+function renderCats(){const filter=$('filtro').value.trim().toLowerCase();$('categorias').replaceChildren();const visible=cats.filter(c=>[c.nomeEn,c.grupoEn,c.grupoPt,c.subgrupoEn].join(' ').toLowerCase().includes(filter));for(const c of visible){const l=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.checked=selected.has(c.id);check.onchange=()=>{if(check.checked){selected.add(c.id)}else selected.delete(c.id);count()};l.append(check,document.createTextNode(c.grupoPt+' / '+c.nomeEn+' ('+c.grupoEn+')'));$('categorias').append(l)}count()}
+function count(){$('contagem').textContent=selected.size+' categorias selecionadas · '+cats.length+' categorias oficiais encontradas.'}
+async function loadCats(){try{$('contagem').textContent='Consultando CJ...';const x=await api('/categorias');cats=x.categorias||[];renderCats()}catch(e){$('contagem').textContent=e.message}}
+$('buscarCategorias').onclick=loadCats;$('filtro').oninput=renderCats;$('limpar').onclick=()=>{selected.clear();renderCats()};$('todas').onclick=()=>{for(const c of cats.filter(c=>[c.nomeEn,c.grupoEn,c.grupoPt,c.subgrupoEn].join(' ').toLowerCase().includes($('filtro').value.toLowerCase()))){selected.add(c.id)}renderCats()};
+function cell(tr,value){const td=document.createElement('td');td.textContent=String(value??'—');tr.append(td);return td}
+async function atualizar(){try{const s=await api('/status');$('msg').textContent=[s.configurada?'CJ conectada':'CJ_API_KEY ausente',s.awesomeConfigurada?'AwesomeAPI configurada':'Câmbio manual ou ausente',s.mensagem||'Aguardando',s.finalizadoEm?'Última execução: '+new Date(s.finalizadoEm).toLocaleString('pt-BR'):'',s.avisoTraducao||'',s.executando?'Executando...':'Parado',s.categorias?JSON.stringify(s.categorias):''].filter(Boolean).join(' · ');const d=await api('/produtos');$('itens').replaceChildren();for(const p of d.itens){const tr=document.createElement('tr');for(const v of [p.nome,p.sku,p.preco_usd,p.preco_brl,p.status,p.status_traducao==='aprovado'&&p.nome_ptbr?'Aprovada':'Aguardando robô',p.motivo])cell(tr,v);const td=document.createElement('td');const b=document.createElement('button');b.textContent='Variantes / frete';b.onclick=()=>revisar(p);td.append(b);const toggle=document.createElement('button');toggle.textContent=p.status==='desativado'?'Reativar':'Retirar da vitrine';toggle.style.background=p.status==='desativado'?'#24744e':'#a62f32';toggle.onclick=async()=>{if(!confirm(p.status==='desativado'?'Reativar para revisão?':'Retirar este produto da vitrine e bloquear republicação automática?'))return;try{const endpoint=p.status==='desativado'?'reativar':'desativar';const x=await api('/produtos/'+encodeURIComponent(p.id_externo)+'/'+endpoint,{method:'POST'});$('msg').textContent=x.mensagem;await atualizar()}catch(e){$('msg').textContent=e.message}};td.append(toggle);tr.append(td);$('itens').append(tr)}}catch(e){$('msg').textContent=e.message}}
+async function revisar(p){$('reviewArea').hidden=false;$('reviewTitle').textContent='Variantes — '+p.nome;$('variantes').textContent='Carregando variantes...';$('freteStatus').textContent='';try{const x=await api('/variantes/'+encodeURIComponent(p.id_externo));$('variantes').replaceChildren();if(!x.variantes.length)$('variantes').textContent='A CJ não retornou variantes para este produto.';for(const v of x.variantes){const line=document.createElement('p');line.textContent=(v.nome||v.sku||v.vid)+' · US$ '+(v.precoUSD??'sem preço')+' ';const pub=document.createElement('button');pub.textContent='Publicar esta variante (exige PT-BR aprovado)';pub.disabled=v.precoUSD===null||!v.vid||p.status_traducao!=='aprovado'||!p.nome_ptbr;pub.onclick=async()=>{if(!confirm('Publicar esta variante específica na vitrine?'))return;try{const r=await api('/variantes/'+encodeURIComponent(p.id_externo)+'/publicar',{method:'POST',body:JSON.stringify({vid:v.vid})});$('freteStatus').textContent='Variante publicada por R$ '+r.precoBRL+'. Frete CJ ainda não cotado.';await atualizar()}catch(e){$('freteStatus').textContent=e.message}};const quote=document.createElement('button');quote.textContent='Cotar frete BR';quote.disabled=!v.vid;quote.onclick=async()=>{const cep=prompt('CEP brasileiro (opcional; cancelar para não consultar):','');if(cep===null)return;try{const q=await api('/frete/cotar',{method:'POST',body:JSON.stringify({vid:v.vid,origem:'CN',cep})});$('freteStatus').textContent=q.opcoes.length?q.opcoes.map(z=>z.transportadora+' · US$ '+z.freteUSD+' · '+(z.prazoInformado||'prazo não informado')).join(' | '):'Nenhuma opção de envio retornada para o Brasil.'}catch(e){$('freteStatus').textContent=e.message}};line.append(pub,quote);$('variantes').append(line)}}catch(e){$('variantes').textContent=e.message}}
+$('fecharReview').onclick=()=>{$('reviewArea').hidden=true};$('atualizar').onclick=atualizar;$('cambioAtualizar').onclick=async()=>{try{const x=await api('/cambio/atualizar',{method:'POST'});$('msg').textContent='Cotação USD/BRL: R$ '+x.cambio.taxa+' (não recalcula catálogo até sincronizar).'}catch(e){$('msg').textContent=e.message}};
+async function checarIntegracaoPTBR(){
+ try { const v=await api('/integracao/versao');
+   $('estadoIntegracaoPtbr').textContent=v.portaoPtbr&&v.sincronizacaoManual?'Backend integrado: Etapa '+v.versao+' — proteção PT-BR ativa.':'ATENÇÃO: backend não confirmou a proteção PT-BR.';
+ } catch(e){ $('estadoIntegracaoPtbr').textContent='Backend da Etapa 7.1 não confirmado. Confira o deploy no Render antes de sincronizar: '+e.message; }
+}
+$('sincronizarPtbr').onclick=async()=>{
+ const btn=$('sincronizarPtbr');btn.disabled=true;
+ $('resultadoSincronizacaoPtbr').textContent='Sincronizando somente produtos CJ aprovados...';
+ try { const x=await api('/sincronizar-aprovados',{method:'POST'});
+   const msg=`Concluído: ${x.publicados} produtos CJ elegíveis; ${x.adicionados} novos anúncios; ${x.removidos} anúncios antigos removidos. Os demais continuam aguardando aprovação ou dados comerciais válidos.`;
+   $('resultadoSincronizacaoPtbr').textContent=msg;
+   await atualizar();
+ }catch(e){$('resultadoSincronizacaoPtbr').textContent='Sincronização não confirmada: '+e.message+' — confira a versão publicada no Render.';}
+ finally{btn.disabled=false}
+};
+
+$('importar').onclick=async()=>{const b=$('importar');b.disabled=true;try{const x=await api('/importar',{method:'POST',body:JSON.stringify(payload())});$('msg').textContent=x.mensagem||x.motivo;setTimeout(atualizar,4500)}catch(e){$('msg').textContent=e.message}finally{b.disabled=false}};
+async function carregarCJ(){try{const c=await api('/automacao/config');$('cjAtivo').checked=!!c.ativo;$('cjHoras').value=String(c.intervaloHoras);$('palavra').value=c.palavra||'';$('quantidade').value=c.quantidade;$('pagina').value=c.pagina;pendingSchedule=c.categorias||[];selected=new Set(pendingSchedule);renderCats();$('cjStatus').textContent=c.ativo?'Próxima execução: '+new Date(c.proximaExecucao).toLocaleString('pt-BR'):'Automação CJ desativada.'}catch(e){$('cjStatus').textContent=e.message}}
+$('cjSalvar').onclick=async()=>{try{const p=payload();const c=await api('/automacao/config',{method:'PUT',body:JSON.stringify({...p,ativo:$('cjAtivo').checked,intervaloHoras:Number($('cjHoras').value)})});$('cjStatus').textContent='Salvo. '+(c.ativo?'Próxima execução: '+new Date(c.proximaExecucao).toLocaleString('pt-BR'):'Desativado')}catch(e){$('cjStatus').textContent=e.message}};
+$('cjAgora').onclick=async()=>{try{const x=await api('/automacao/executar-agora',{method:'POST'});$('cjStatus').textContent=x.mensagem||x.motivo;setTimeout(atualizar,4500)}catch(e){$('cjStatus').textContent=e.message}};
+Promise.all([loadCats(),carregarCJ(),atualizar(),checarIntegracaoPTBR()]);
+
+// Nova área gerencial: toda requisição é autenticada pelo mesmo token do painel CJ.
+const fi={itens:[],cambio:0,regras:null,pagina:0,porPagina:10};
+const fBRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
+const fUSD=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'USD'});
+const $fi=id=>document.getElementById(id);
+function fiValor(v,fmt){return v===null||v===undefined||!Number.isFinite(Number(v))?'—':fmt.format(Number(v))}
+function fiPreco(p){
+ if(!fi.regras||!fi.cambio||p.custoUSD===null||p.margem===null||p.margem==='')return null;
+ const m=Number(p.margem),r=fi.regras;
+ const total=m+Number(r.reserva)+Number(r.taxaPagamento)+Number(r.tributos)+Number(r.reservaAfiliados)+Number(r.protecao);
+ if(!Number.isFinite(total)||total>=100||m<0)return null;
+ const custo=Math.ceil((Number(p.custoUSD)*fi.cambio-1e-9)*100)/100;
+ return Math.ceil((((custo+Number(r.frete)+Number(r.despesaFixa))/(1-total/100))-1e-9)*100)/100;
+}
+function fiFiltrados(){
+ const o=$fi('fiOrigem').value,teto=Number($fi('fiTeto').value||0);
+ let out=fi.itens.filter(p=>(o==='all'||o==='preferBR'||(o==='BR'?p.origemEstoque==='BR':!p.origemEstoque))&&(!teto||fiPreco(p)===null||fiPreco(p)<=teto));
+ if(o==='preferBR')out=out.slice().sort((a,b)=>(b.origemEstoque==='BR')-(a.origemEstoque==='BR'));
+ return out;
+}
+function fiAdd(parent,tag,content,className){const e=document.createElement(tag);if(content!==undefined)e.textContent=String(content);if(className)e.className=className;parent.append(e);return e}
+function fiExibir(){
+ const data=fiFiltrados(),totalPages=Math.max(1,Math.ceil(data.length/fi.porPagina));fi.pagina=Math.min(fi.pagina,totalPages-1);
+ const list=data.slice(fi.pagina*fi.porPagina,(fi.pagina+1)*fi.porPagina),tb=$fi('fiLinhas');tb.replaceChildren();
+ if(!list.length){const td=fiAdd(fiAdd(tb,'tr'),'td','Nenhum item encontrado com os filtros selecionados.');td.colSpan=7}
+ for(const p of list){
+   const tr=fiAdd(tb,'tr'),col=fiAdd(tr,'td'),flex=fiAdd(col,'div',undefined,'fi-product');
+   if(p.imagem){const img=fiAdd(flex,'img',undefined,'fi-thumb');img.src=p.imagem;img.loading='lazy';img.referrerPolicy='no-referrer';img.alt='Imagem do produto';img.onerror=()=>{img.replaceWith(fiAdd(flex,'span','📦','fi-thumb fi-thumb-fallback'))}}else fiAdd(flex,'span','📦','fi-thumb fi-thumb-fallback');
+   const info=fiAdd(flex,'div');fiAdd(info,'strong',p.nome||'Produto sem título');fiAdd(info,'small',p.sku||p.id,'fi-muted');
+   if(p.urlCJ){const link=fiAdd(info,'a','Ver produto na CJ');link.href=p.urlCJ;link.rel='noopener noreferrer';link.target='_blank'}
+   else {const link=fiAdd(info,'a','Abrir CJ (pesquise pelo SKU)');link.href='https://cjdropshipping.com/';link.rel='noopener noreferrer';link.target='_blank';}
+   const origin=fiAdd(tr,'td');fiAdd(origin,'strong',p.origemEstoque==='BR'?'Brasil confirmado':p.origemEstoque||'Origem não confirmada');fiAdd(origin,'div',p.frete||'Frete não cotado','fi-muted');
+   fiAdd(tr,'td',fiValor(p.custoUSD,fUSD),'fi-money');fiAdd(tr,'td',fiValor(p.custoBRL,fBRL),'fi-money');
+   const marginTd=fiAdd(tr,'td'),margin=fiAdd(marginTd,'input',undefined,'fi-input');margin.type='number';margin.step='0.1';margin.min='0';margin.max='99';margin.placeholder='Defina %';margin.value=p.margem===null?'':String(p.margem);margin.setAttribute('aria-label','Margem para '+p.nome);
+   const priceTd=fiAdd(tr,'td',fiValor(fiPreco(p),fBRL),'fi-money');
+   margin.oninput=()=>{p.margem=margin.value===''?null:Number(margin.value);priceTd.textContent=fiValor(fiPreco(p),fBRL)};
+   const act=fiAdd(tr,'td'),buttons=fiAdd(act,'div',undefined,'fi-actions');
+   const yes=fiAdd(buttons,'button','✓','fi-ok'+(p.decisao==='aprovado'?' fi-chosen':''));yes.type='button';yes.title='Aprovar/importar individualmente';yes.setAttribute('aria-label','Aprovar '+p.nome);
+   const no=fiAdd(buttons,'button','✕','fi-no'+(p.decisao==='rejeitado'?' fi-denied':''));no.type='button';no.title='Rejeitar individualmente';no.setAttribute('aria-label','Rejeitar '+p.nome);
+   fiAdd(act,'div',p.decisao==='aprovado'?'Aprovado no Neon':p.decisao==='rejeitado'?'Rejeitado':'Aguardando','fi-muted');
+   if(p.statusNeon)fiAdd(act,'div','Neon: '+p.statusNeon,'fi-muted');
+   yes.onclick=()=>fiDecidir(p,'aprovado',yes,no);no.onclick=()=>fiDecidir(p,'rejeitado',yes,no);
+ }
+ $fi('fiEncontrados').textContent=data.length;$fi('fiAprovados').textContent=fi.itens.filter(x=>x.decisao==='aprovado').length;
+ $fi('fiRejeitados').textContent=fi.itens.filter(x=>x.decisao==='rejeitado').length;
+ $fi('fiPaginacao').textContent=data.length?`Itens ${fi.pagina*fi.porPagina+1}–${Math.min(data.length,(fi.pagina+1)*fi.porPagina)} de ${data.length}`:'Nenhum resultado';
+ $fi('fiAnterior').disabled=fi.pagina===0;$fi('fiProxima').disabled=fi.pagina>=totalPages-1;
+}
+async function fiDecidir(p,decisao,yes,no){
+ if(decisao==='aprovado'){
+   if(fiPreco(p)===null){$fi('fiMensagem').textContent='Defina uma margem válida; produto sem preço USD único precisa de variante confirmada.';return}
+   if(!confirm('Aprovar este produto e registrar no Neon? Será publicado somente após aprovação PT-BR e validação comercial.'))return;
+ }else if(!confirm('Rejeitar este produto? Se estiver publicado, será retirado pela sincronização CJ.'))return;
+ yes.disabled=true;no.disabled=true;
+ try{const d=await api('/gerencial/decidir',{method:'POST',body:JSON.stringify({id:p.id,decisao,margem:p.margem})});
+   p.decisao=decisao;p.statusNeon=d.statusNeon||p.statusNeon;
+   $fi('fiMensagem').textContent=d.mensagem+(d.sincronizacao?.aviso?' '+d.sincronizacao.aviso:'');
+   fiExibir();
+ }catch(e){$fi('fiMensagem').textContent='Não foi alterado: '+e.message;yes.disabled=false;no.disabled=false}
+}
+async function fiBuscar(){
+ const btn=$fi('fiPesquisar');btn.disabled=true;$fi('fiMensagem').textContent='Consultando catálogo CJ sem importar produtos...';
+ try{const body={palavra:$fi('fiPalavra').value,origem:$fi('fiOrigem').value,maxUSD:$fi('fiMaxUSD').value,quantidade:Number($fi('fiQuantidade').value),
+   pagina:Number($fi('fiPaginaCJ').value),categorias:[...selected]};
+   const d=await api('/gerencial/previsualizar',{method:'POST',body:JSON.stringify(body)});
+   fi.itens=d.itens||[];fi.cambio=Number(d.cambio.taxa);fi.regras=d.regras;
+   fi.pagina=0;$fi('fiCambio').textContent='USD/BRL: '+fi.cambio.toFixed(4)+' · '+d.cambio.fonte;
+   const names={frete:'Frete embutido R$',reserva:'Reserva %',taxaPagamento:'Taxa pagamento %',tributos:'Tributos %',reservaAfiliados:'Afiliados %',despesaFixa:'Despesa fixa R$',protecao:'Proteção %'};
+   const holder=$fi('fiRegras');holder.replaceChildren();for(const [k,label] of Object.entries(names))fiAdd(holder,'span',label+': '+d.regras[k]);
+   $fi('fiMensagem').textContent=`${fi.itens.length} produto(s) recebidos. ${d.aviso||''}`+(d.erros?.length?'\nErros CJ: '+d.erros.join('; '):'');
+   fiExibir();
+ }catch(e){$fi('fiMensagem').textContent='Falha na consulta: '+e.message}
+ finally{btn.disabled=false}
+}
+$fi('fiPesquisar').onclick=fiBuscar;
+for(const id of ['fiOrigem','fiTeto'])$fi(id).addEventListener('input',()=>{fi.pagina=0;fiExibir()});
+$fi('fiAnterior').onclick=()=>{fi.pagina--;fiExibir()};$fi('fiProxima').onclick=()=>{fi.pagina++;fiExibir()};
+
+</script></body></html>

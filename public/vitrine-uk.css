@@ -1,0 +1,83 @@
+:root{--navy:#061c46;--blue:#0858b9;--sky:#eaf6ff;--orange:#ff821b;--ink:#163050;--muted:#677b93;--border:#dfe9f4;--green:#087a50;--bg:#f4f8ff}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:14px Inter,system-ui,-apple-system,Segoe UI,sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}a{color:inherit;text-decoration:none}button:disabled{opacity:.55;cursor:not-allowed}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #ff9b30;outline-offset:2px}.container{max-width:1220px;margin:auto;padding:0 17px}.uktop{position:sticky;top:0;z-index:30;background:white;border-bottom:1px solid var(--border);box-shadow:0 5px 18px #082c660b}.ukhead{min-height:69px;display:flex;align-items:center;justify-content:space-between;gap:16px}.ukbrand{display:inline-flex;align-items:center;gap:9px;font-weight:900;font-size:20px;color:var(--navy)}.uklogo{display:inline-grid;place-items:center;width:45px;height:43px;border-radius:12px;background:linear-gradient(130deg,#06265e,#0b63c2);color:#fff;letter-spacing:-2px;font-size:24px}.uklogo b{color:#ff8b25}.uklinks{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.uklinks a,.smallbtn{border:1px solid #dbe8f8;background:#f3f8fe;padding:9px 12px;border-radius:10px;font-weight:700;font-size:12px}.uklinks a:hover,.smallbtn:hover{background:#e7f4ff}.section-card{background:white;border:1px solid var(--border);border-radius:17px;box-shadow:0 6px 25px #092b690b}.breadcrumb{font-size:12px;color:var(--muted);margin:19px 0}.breadcrumb a{color:#0855ae}.section-title{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 0 15px}.section-title h2{font-size:19px;margin:0;color:#082a5e}.muted{color:var(--muted)}.btn{border:0;border-radius:11px;padding:12px 17px;font-weight:850}.btn-blue{background:#0758b9;color:white}.btn-orange{background:#ff861f;color:#102b50}.btn-green{background:#0a8256;color:white}.btn-soft{background:#e9f4ff;color:#0758b9}.btn-outline{background:#fff;border:1px solid #aacde9;color:#084b98}.loading{padding:30px;text-align:center;color:var(--muted)}.note{font-size:12px;color:#5f728a;line-height:1.65}.alert{padding:13px 15px;border:1px solid #f0cf96;background:#fff8e8;color:#794f14;border-radius:11px;line-height:1.55}.success{color:#05734c}.error{color:#ba3a29}.hidden{display:none!important}.footer{margin-top:44px;background:linear-gradient(120deg,#031939,#0c4388);color:#d3e6fa;padding:26px 0;font-size:12px}.footer a{text-decoration:underline}.product-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.recommend-card{display:block;overflow:hidden;background:#fff;border:1px solid var(--border);border-radius:14px;transition:transform .2s,box-shadow .2s}.recommend-card:hover{transform:translateY(-2px);box-shadow:0 9px 20px #083c7d22}.recommend-photo{height:155px;background:#f2f7fd;display:grid;place-items:center}.recommend-photo img{width:100%;height:100%;object-fit:contain}.recommend-details{padding:10px}.recommend-name{font-size:12px;font-weight:700;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:35px}.recommend-price{font-size:17px;font-weight:900;color:var(--green);margin-top:8px}.uk-bottom{display:none}@media(max-width:850px){.product-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:620px){.ukhead{min-height:57px}.ukbrand{font-size:17px}.uklogo{width:35px;height:35px;font-size:19px}.uklinks{gap:5px}.uklinks a{padding:7px 8px;font-size:10px}.container{padding:0 11px}.product-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.recommend-photo{height:134px}.recommend-details{padding:9px}.recommend-price{font-size:16px}.section-title h2{font-size:17px}.uk-bottom{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#fff;border-top:1px solid #d7e7f8;z-index:35;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.uk-bottom a{display:grid;justify-items:center;gap:3px;font-size:10px;color:#315474}.uk-bottom span{font-size:18px}.footer{padding-bottom:90px}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
+
+/* VITRINE: logotipo totalmente enquadrado e carrinho com badge na barra superior. */
+.ukbrand{white-space:nowrap;min-width:0;flex-shrink:0}
+.uklogo{display:flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 45px;letter-spacing:0;line-height:1}
+.uklogo-letters{display:inline-flex;align-items:baseline;justify-content:center;gap:0;font-size:22px;font-weight:900;letter-spacing:-.6px;line-height:1;color:#fff}
+.uklogo-letters b{font-size:20px;letter-spacing:0;color:#ff902f}
+.ukcart-link{position:relative;display:inline-flex!important;align-items:center;gap:7px;white-space:nowrap;border:1px solid #d3e4f5;background:#edf6ff;color:#0756aa;border-radius:11px;padding:9px 12px;font-size:12px;font-weight:800;min-height:43px}
+.ukcart-link:hover{background:#dceeff}
+.ukcart-link svg{width:25px;height:25px;flex:none}
+.ukcart-badge{position:absolute;top:-6px;left:26px;min-width:19px;height:19px;display:grid;place-items:center;background:#ff791b;color:white;font-size:10px;padding:0 4px;border:2px solid white;border-radius:99px;font-weight:900;line-height:1}
+.ukcart-badge[hidden]{display:none!important}
+.ukhead{min-width:0}.uklinks{justify-content:flex-end;min-width:0}
+.product-grid .recommend-card{min-width:0}
+.recommend-more-bar{display:flex;justify-content:center;padding:20px 0 4px}
+.recommend-more-bar button{border:1px solid #bfd7ee;background:#edf6ff;border-radius:11px;color:#0956a5;font-weight:850;padding:11px 20px;min-width:175px}
+.recommend-more-bar button:disabled{opacity:.55}
+.recommend-feed-status{padding:8px 4px;text-align:center;color:#617992;font-size:12px;min-height:16px}
+@media(max-width:620px){
+ .ukhead{min-height:60px;gap:9px}
+ .ukbrand{font-size:16px;gap:7px}
+ .uklogo{width:39px;height:39px;flex-basis:39px;border-radius:11px}
+ .uklogo-letters{font-size:19px}
+ .uklogo-letters b{font-size:17px}
+ .uklinks .uk-secondary-link{display:none!important}
+ .ukcart-link{padding:7px 10px;min-height:43px;gap:6px;background:#f4f9ff}
+ .ukcart-link svg{width:27px;height:27px}
+ .ukcart-label{font-size:11px}
+ .ukcart-badge{left:27px}
+}
+@media(max-width:350px){.ukcart-label{display:none}}
+
+
+/* CORRECAO DOS CARDS DE RECOMENDACAO — 23/11/2026
+ * Fotos ficam estritamente confinadas ao quadro superior; titulo e preco em bloco
+ * proprio, sempre abaixo da imagem, independentemente da proporcao do arquivo.
+ * Compartilhado pelas vitrines extras do produto e da Minha Conta.
+ */
+.product-grid{align-items:stretch}
+.product-grid .recommend-card{
+  display:flex;flex-direction:column;min-width:0;min-height:0;
+  overflow:hidden;isolation:isolate;background:#fff;
+}
+.product-grid .recommend-photo{
+  display:flex;align-items:center;justify-content:center;
+  width:100%;height:180px;min-height:180px;max-height:180px;
+  flex:0 0 180px;overflow:hidden;position:relative;
+  background:#f4f8fd;
+}
+.product-grid .recommend-photo img{
+  display:block;width:100%;height:100%;min-width:0;min-height:0;
+  max-width:100%;max-height:100%;object-fit:contain;object-position:center;
+}
+.product-grid .recommend-details{
+  position:relative;z-index:1;display:flex;flex:1 1 auto;
+  flex-direction:column;justify-content:flex-start;
+  min-width:0;min-height:86px;padding:12px;
+  background:#fff;overflow:hidden;
+}
+.product-grid .recommend-name{
+  position:static;display:-webkit-box;-webkit-box-orient:vertical;
+  -webkit-line-clamp:2;line-clamp:2;overflow:hidden;
+  min-width:0;min-height:36px;margin:0;
+  color:#173455;font-size:12px;font-weight:750;line-height:1.5;
+  overflow-wrap:anywhere;
+}
+.product-grid .recommend-price{
+  position:static;flex:0 0 auto;display:block;
+  margin-top:auto;padding-top:10px;
+  font-size:17px;font-weight:900;line-height:1.25;color:#087a50;
+  overflow-wrap:anywhere;
+}
+@media(max-width:620px){
+ .product-grid .recommend-photo{height:147px;min-height:147px;max-height:147px;flex-basis:147px}
+ .product-grid .recommend-details{min-height:86px;padding:10px}
+ .product-grid .recommend-price{font-size:16px}
+}
+
+/* VITRINE GATILHO: conta, ajustes e comunicação real de ofertas */
+.uk-account-settings{margin:20px auto;padding:22px;max-width:950px}.uk-account-settings h2{margin:0 0 8px}.uk-account-settings .settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.uk-account-settings label{display:block;margin:10px 0;font-size:13px;font-weight:700}.uk-account-settings input{display:block;width:100%;padding:12px;border:1px solid #d2e1f1;border-radius:9px;margin-top:6px}.uk-account-settings button{margin:7px 7px 7px 0;padding:10px 14px;background:#0b58b7;border:0;border-radius:9px;color:white;font-weight:750}.uk-account-settings .setting-links{display:flex;flex-wrap:wrap;gap:7px;margin:15px 0}.uk-account-settings .setting-links a{padding:9px 12px;border-radius:9px;background:#edf6ff;color:#073e81;font-weight:750}.uk-account-settings .settings-message{font-size:12px;min-height:20px}.uk-detail-promos{margin:14px 0;padding:16px;background:#fff8ea;border:1px solid #ffd49c;border-radius:15px}.uk-detail-promos strong{font-size:17px}.uk-detail-promos .uk-savings{display:block;color:#b42a34;margin-top:6px}.uk-detail-promos .uk-rotating-note{display:block;min-height:22px;color:#0a4b82;margin-top:9px;font-weight:750}.uk-product-subline{min-height:19px;font-size:11px;color:#06794d;font-weight:700;margin:5px 0 7px}.uk-product-subline strong{color:#b42231}.uk-dashboard-visitas{max-width:1150px;margin:24px auto;padding:20px;border:1px solid #dbe5f2;border-radius:17px;background:white}.uk-visit-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.uk-visit-stats>div{padding:16px;background:#f1f6fd;border-radius:12px}.uk-visit-stats strong{display:block;font-size:25px;color:#0c468f}.uk-visit-table{width:100%;border-collapse:collapse;margin-top:14px}.uk-visit-table td,.uk-visit-table th{padding:9px;border-bottom:1px solid #e3eaf3;text-align:left}
+@media(max-width:700px){.uk-account-settings .settings-grid{grid-template-columns:1fr}.uk-visit-stats{grid-template-columns:1fr}.uk-account-settings{padding:13px}}
+
+.uk-account-showcase{padding:clamp(18px,4vw,32px);margin:14px auto 22px;background:linear-gradient(115deg,#062a60,#0b65c6);color:#fff;max-width:1200px}.uk-account-showcase h2{font-size:clamp(23px,3vw,30px);margin:10px 0}.uk-account-showcase p{font-size:14px;line-height:1.6}.uk-showcase-eyebrow{color:#ffd3ab;letter-spacing:.12em;font-size:11px;font-weight:800}.uk-showcase-buttons{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:16px}.uk-showcase-buttons a{background:#ff861f;padding:11px 17px;border-radius:9px;color:#102b50;font-weight:800}.uk-showcase-buttons button{border:1px solid #ffffff77;border-radius:8px;background:#ffffff15;color:#fff;padding:9px 12px;font-weight:700}.uk-account-showcase:focus-within{outline-offset:3px}

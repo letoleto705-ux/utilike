@@ -1,0 +1,55 @@
+UTI LIKE — TRADUÇÃO LOCAL SEM API PAGA + IMAGENS RESPONSIVAS
+
+ATENÇÃO: PACOTE DE ATUALIZAÇÃO, NÃO PROJETO COMPLETO.
+Não altera server.js, package.json, Precificação Central, checkout nem Garimpagem.
+Não foi testado em Neon/Render reais nem em aparelhos físicos.
+
+ARQUIVOS PARA SUBSTITUIR/ACRESCENTAR NO REPOSITÓRIO:
+- public/index.html                 SUBSTITUIR (arquivo enviado pelo administrador)
+- public/responsive.css             SUBSTITUIR (arquivo enviado pelo administrador)
+- cj-dropshipping-routes.js         SUBSTITUIR (arquivo enviado pelo administrador)
+- traducao-cj.js                    SUBSTITUIR
+- robot/traduzir_offline.py         NOVO
+- robot/instalar_modelo.py          NOVO
+- robot/requirements.txt            NOVO
+
+COMO FUNCIONA:
+1. CJ lista produtos e o importador solicita tradução de títulos e descrições disponíveis na resposta.
+2. Node executa um processo Python local com biblioteca Argos Translate, sem API paga.
+3. Traduções são armazenadas no cache da tabela config no Neon.
+4. Dados originais ficam preservados no JSON da tabela cj_produtos e no catálogo.
+5. Se tradutor/modelo não estiver disponível, preserva o inglês e sinaliza traducaoPendente; NÃO inventa tradução.
+6. Imagens da vitrine tentam as URLs alternativas presentes no produto e depois mostram placeholder.
+7. Precificação e horários da automação CJ permanecem inalterados.
+
+CONFIGURAÇÃO DO TRADUTOR NO RENDER:
+- Necessário ambiente com Python 3 e dependências nativas compatíveis com Argos Translate.
+- Instale: python3 -m pip install -r robot/requirements.txt
+- Instale o modelo en->pt uma vez: python3 robot/instalar_modelo.py
+- Modelo deve estar disponível para o mesmo usuário que executa Node; filesystem efêmero do Render
+  pode exigir instalar modelo no BUILD (ou armazenamento persistente).
+- CJ_PYTHON_BIN opcional: caminho do executável Python (padrão python3).
+- Não precisa de CJ_TRANSLATE_URL nem CJ_TRANSLATE_KEY.
+- Render Node service pode não incluir Python, memória ou tempo suficientes. Verifique o plano,
+  logs e build. Uma alternativa é executar o tradutor num worker Python separado.
+- A instalação do modelo exige internet e tem download; não há custo de API, mas pode haver custo
+  de hospedagem e de processamento.
+
+LIMITAÇÕES IMPORTANTES:
+- A resposta listV2 da CJ pode NÃO trazer a descrição completa; nesses casos só traduz títulos
+  e descrições que de fato vierem no retorno. Para obter descrições ausentes, será necessário
+  validar um endpoint de detalhes da CJ antes de adicioná-lo.
+- Tradução offline não é instantânea e pode ter qualidade variável. Verifique produtos sensíveis.
+- Imagens externas bloqueadas pelo host continuam indisponíveis se todas as URLs falharem.
+  Para resolver a origem do bloqueio é preciso testar URLs reais e avaliar armazenamento próprio
+  autorizado; este pacote não implementa proxy remoto inseguro.
+- Tradução dos produtos antigos só ocorre quando eles forem incluídos numa nova importação CJ.
+- Variantes fixadas e produtos desativados não são alterados.
+- Nenhuma migração SQL obrigatória neste pacote.
+
+VALIDAÇÃO ANTES DO DEPLOY:
+1. Backup dos arquivos originais e do catálogo Neon.
+2. Instale Python e modelo em ambiente de homologação.
+3. Teste importação de 1 a 3 produtos CJ e verifique tradução, preço, imagem e status.
+4. Confira a vitrine em Safari iOS, Chrome Android, tablet e desktop.
+5. Monitore logs e o status de importação; em erro, restaure os arquivos originais.
