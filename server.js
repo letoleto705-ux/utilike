@@ -7,15 +7,17 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { MAX_AFFILIATE_LEVELS, resolveAffiliateChain } = require('./affiliate-chain');
 
-// ===== Variáveis de ambiente (configure no Render) =====
+const LOCAL_SAFE_MODE = process.env.UTI_LIKE_LOCAL_SAFE_MODE === 'true';
+
+// ===== VariÃ¡veis de ambiente (configure no Render) =====
 const { DATABASE_URL, JWT_SECRET, ADMIN_SENHA } = process.env;
 const ADMIN_USUARIO = (process.env.ADMIN_USUARIO || 'admin').trim().toLowerCase();
 if (!DATABASE_URL || !JWT_SECRET || !ADMIN_SENHA) {
-  console.error('Defina DATABASE_URL, JWT_SECRET e ADMIN_SENHA nas variáveis de ambiente.');
+  console.error('Defina DATABASE_URL, JWT_SECRET e ADMIN_SENHA nas variÃ¡veis de ambiente.');
   process.exit(1);
 }
 
-// ===== Regras padrão de comissão =====
+// ===== Regras padrÃ£o de comissÃ£o =====
 const TAXA_COMISSAO_PADRAO = 30;
 const TAXA_PATROCINADOR_PADRAO = 10;
 const TAXA_AVO_PADRAO = 10;
@@ -34,11 +36,17 @@ const dataIso = valor => {
 
 const PRODUTOS_INICIAIS = [];
 
-const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 5 });
+const bancoHost = new URL(DATABASE_URL).hostname;
+const bancoLocal = ['localhost', '127.0.0.1', '::1'].includes(bancoHost);
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  ssl: bancoLocal ? false : { rejectUnauthorized: false },
+  max: 5
+});
 const q = (sql, params) => pool.query(sql, params);
 pool.on('error', err => console.error('ERRO NO NEON:', err));
 
-// ===== Utilitários =====
+// ===== UtilitÃ¡rios =====
 const norm = t => (t == null ? '' : String(t).trim().toLowerCase());
 const normUsuario = t => String(t == null ? '' : t)
   .normalize('NFD')
@@ -445,8 +453,8 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '200kb' }));
-// Sessão UK central: cookie assinado HttpOnly, compartilhado entre páginas e dispositivos
-// que usam as mesmas credenciais. O cookie contém só a identidade autenticada, não a sacola.
+// SessÃ£o UK central: cookie assinado HttpOnly, compartilhado entre pÃ¡ginas e dispositivos
+// que usam as mesmas credenciais. O cookie contÃ©m sÃ³ a identidade autenticada, nÃ£o a sacola.
 function lerCookieUK(req,nome){
  const raw=String(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(nome+'='));
  try{return raw?decodeURIComponent(raw.slice(nome.length+1)):''}catch{return ''}
@@ -457,7 +465,7 @@ function cookieUK(req,res,nome,valor,dias=7){
 }
 function atribuirCookieLogin(req,res,token){cookieUK(req,res,'uk_sessao',token)}
 // Reconhecimento opcional apenas para a API UK de visitante.
-// A autorização real de ações privadas ainda passa pelo middleware auth.
+// A autorizaÃ§Ã£o real de aÃ§Ãµes privadas ainda passa pelo middleware auth.
 app.use('/api/uk',(req,res,next)=>{
  const t=lerCookieUK(req,'uk_sessao');if(!t)return next();
  try{req.user=jwt.verify(t,JWT_SECRET);if(req.user.trocar)req.user=null}catch{req.user=null}
@@ -484,7 +492,7 @@ function auth(req, res, next) {
   try {
     try{req.user = jwt.verify(h.startsWith('Bearer ') ? h.slice(7) : cookieToken, JWT_SECRET)}catch(e){if(!cookieToken)throw e;req.user=jwt.verify(cookieToken,JWT_SECRET)}
   } catch (e) {
-    return res.status(401).json({ erro: 'Sessão expirada. Faça login novamente.' });
+    return res.status(401).json({ erro: 'SessÃ£o expirada. FaÃ§a login novamente.' });
   }
   if (req.user.trocar && !req.path.startsWith('/api/senha/')) {
     return res.status(403).json({ erro: 'Defina uma nova senha antes de continuar.', trocarSenha: true });
@@ -496,7 +504,7 @@ function auth(req, res, next) {
     : 'SELECT 1 FROM contas WHERE usuario = $1';
   q(consultaConta, [norm(req.user.usuario)])
     .then(({ rows }) => {
-      if (!rows.length) return res.status(401).json({ erro: 'Conta removida. Faça login novamente.' });
+      if (!rows.length) return res.status(401).json({ erro: 'Conta removida. FaÃ§a login novamente.' });
       next();
     })
     .catch(next);
@@ -539,10 +547,10 @@ app.get('/api/admin/diagnostico-banco', auth, soAdmin, wrap(async (req, res) => 
   });
 }));
 
-// Validação segura de persistência no Neon sem bloquear transações válidas
+// ValidaÃ§Ã£o segura de persistÃªncia no Neon sem bloquear transaÃ§Ãµes vÃ¡lidas
 function exigirUmaLinhaPersistida(resultado, tabela) {
   if (!resultado || (resultado.rowCount !== null && resultado.rowCount !== undefined && resultado.rowCount < 1) || (resultado.rows && resultado.rows.length === 0)) {
-    throw new Error(`O Neon não confirmou a gravação esperada na tabela ${tabela}.`);
+    throw new Error(`O Neon nÃ£o confirmou a gravaÃ§Ã£o esperada na tabela ${tabela}.`);
   }
 }
 
@@ -554,14 +562,14 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
   const senha = String(req.body.senha || '');
   const perfil = req.body.perfil || 'cliente';
 
-  if (!['cliente', 'afiliado'].includes(perfil)) return res.status(400).json({ erro: 'Tipo de cadastro inválido.' });
-  if (!RE_USUARIO.test(usuario)) return res.status(400).json({ erro: 'Usuário inválido.' });
-  if (!nome || !semTags(nome)) return res.status(400).json({ erro: 'Informe um nome válido.' });
-  if (!RE_EMAIL.test(email)) return res.status(400).json({ erro: 'Informe um e-mail válido.' });
-  if (!cpf || !RE_CPF.test(cpf)) return res.status(400).json({ erro: 'Informe um CPF válido.' });
+  if (!['cliente', 'afiliado'].includes(perfil)) return res.status(400).json({ erro: 'Tipo de cadastro invÃ¡lido.' });
+  if (!RE_USUARIO.test(usuario)) return res.status(400).json({ erro: 'UsuÃ¡rio invÃ¡lido.' });
+  if (!nome || !semTags(nome)) return res.status(400).json({ erro: 'Informe um nome vÃ¡lido.' });
+  if (!RE_EMAIL.test(email)) return res.status(400).json({ erro: 'Informe um e-mail vÃ¡lido.' });
+  if (!cpf || !RE_CPF.test(cpf)) return res.status(400).json({ erro: 'Informe um CPF vÃ¡lido.' });
   if (perfil === 'afiliado' && !pix) return res.status(400).json({ erro: 'Informe uma chave Pix.' });
   if (senha.length < 6) return res.status(400).json({ erro: 'A senha precisa ter pelo menos 6 caracteres.' });
-  if (usuario === ADMIN_USUARIO) return res.status(409).json({ erro: 'Este usuário já existe.' });
+  if (usuario === ADMIN_USUARIO) return res.status(409).json({ erro: 'Este usuÃ¡rio jÃ¡ existe.' });
 
   const client = await pool.connect();
   try {
@@ -569,7 +577,7 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
     const ex = await client.query('SELECT 1 FROM contas WHERE usuario = $1 UNION SELECT 1 FROM afiliados WHERE usuario = $1', [usuario]);
     if (ex.rows.length) {
       await client.query('ROLLBACK');
-      return res.status(409).json({ erro: 'Este usuário já existe.' });
+      return res.status(409).json({ erro: 'Este usuÃ¡rio jÃ¡ existe.' });
     }
 
     const senhaHash = await bcrypt.hash(senha, 10);
@@ -592,7 +600,7 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
         if (pai) {
           if (await profundidadeDoPatrocinador(pai.id, client) >= MAX_AFFILIATE_LEVELS) {
             await client.query('ROLLBACK');
-            return res.status(400).json({ erro: 'A rede de afiliados permite no máximo 3 níveis.' });
+            return res.status(400).json({ erro: 'A rede de afiliados permite no mÃ¡ximo 3 nÃ­veis.' });
           }
           patrocinadorId = pai.id;
           patrocinadorUsuario = pai.usuario;
@@ -608,7 +616,7 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
         token: tokenCadastro,
         user: dadosUsuario({ usuario, nome, email, cpf, pix, telefone }, 'afiliado'),
       id, patrocinadorId, patrocinadorUsuario, status: 'PENDENTE', aprovacaoAte: new Date(Date.now()+72*60*60*1000).toISOString(),
-      mensagem: 'Cadastro recebido. Aguarde a aprovação da administração em até 72 horas.'
+      mensagem: 'Cadastro recebido. Aguarde a aprovaÃ§Ã£o da administraÃ§Ã£o em atÃ© 72 horas.'
       });
     }
 
@@ -641,31 +649,31 @@ app.post('/api/login', limitarTentativas, wrap(async (req, res) => {
   }
   const row = r.rows[0];
   if (!row || !(await bcrypt.compare(senha, row.senha_hash))) {
-    return res.status(401).json({ erro: 'Usuário ou senha incorretos.' });
+    return res.status(401).json({ erro: 'UsuÃ¡rio ou senha incorretos.' });
   }
   if (perfil === 'afiliado' && String(row.status || 'APROVADO').toUpperCase() !== 'APROVADO') {
-    return res.status(403).json({ erro: 'Cadastro de afiliado pendente de aprovação da administração em até 72 horas.', status: row.status || 'PENDENTE', aprovacaoAte: row.aprovacao_ate || null });
+    return res.status(403).json({ erro: 'Cadastro de afiliado pendente de aprovaÃ§Ã£o da administraÃ§Ã£o em atÃ© 72 horas.', status: row.status || 'PENDENTE', aprovacaoAte: row.aprovacao_ate || null });
   }
 
   const flag = (await q('SELECT trocar_senha, temp_expira FROM contas WHERE usuario = $1', [row.usuario])).rows[0] || {};
   const trocar = !!flag.trocar_senha;
   if (trocar && flag.temp_expira && new Date(flag.temp_expira) < new Date()) {
-    return res.status(401).json({ erro: 'Senha temporária expirada.' });
+    return res.status(401).json({ erro: 'Senha temporÃ¡ria expirada.' });
   }
   const tokenLogin=gerarToken(row.usuario,perfil,trocar);atribuirCookieLogin(req,res,tokenLogin);res.json({ token:tokenLogin, trocarSenha:trocar, user:dadosUsuario(row,perfil) });
 }));
 
 app.post('/api/afiliar', auth, wrap(async (req, res) => {
-  if (req.user.perfil === 'admin') return res.status(403).json({ erro: 'O administrador não precisa se afiliar.' });
+  if (req.user.perfil === 'admin') return res.status(403).json({ erro: 'O administrador nÃ£o precisa se afiliar.' });
   const usuario = req.user.usuario;
   const nome = txt(req.body.nome, 100), email = txt(req.body.email, 120);
   const cpf = txt(req.body.cpf, 20), pix = txt(req.body.pix, 100);
   const telefone = soDigitos(req.body.telefone);
 
-  if (!nome || !semTags(nome)) return res.status(400).json({ erro: 'Informe um nome válido.' });
-  if (!RE_EMAIL.test(email)) return res.status(400).json({ erro: 'Informe um e-mail válido.' });
-  if (!cpf || !RE_CPF.test(cpf)) return res.status(400).json({ erro: 'Informe um CPF válido.' });
-  if (!pix || !RE_PIX.test(pix)) return res.status(400).json({ erro: 'Informe uma chave Pix válida.' });
+  if (!nome || !semTags(nome)) return res.status(400).json({ erro: 'Informe um nome vÃ¡lido.' });
+  if (!RE_EMAIL.test(email)) return res.status(400).json({ erro: 'Informe um e-mail vÃ¡lido.' });
+  if (!cpf || !RE_CPF.test(cpf)) return res.status(400).json({ erro: 'Informe um CPF vÃ¡lido.' });
+  if (!pix || !RE_PIX.test(pix)) return res.status(400).json({ erro: 'Informe uma chave Pix vÃ¡lida.' });
 
   const client = await pool.connect();
   try {
@@ -673,7 +681,7 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
     const conta = (await client.query('SELECT senha_hash FROM contas WHERE usuario = $1 FOR UPDATE', [usuario])).rows[0];
     if (!conta) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ erro: 'Conta não encontrada.' });
+      return res.status(404).json({ erro: 'Conta nÃ£o encontrada.' });
     }
 
     await client.query('UPDATE contas SET telefone = $2 WHERE usuario = $1', [usuario, telefone]);
@@ -685,8 +693,8 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
       await client.query('COMMIT');
       return res.json({ ok: true, id: existente.id, patrocinadorId: existente.patrocinador_id, patrocinadorUsuario,
         status: existente.status || 'APROVADO', mensagem: existente.status === 'PENDENTE'
-          ? 'Afiliação pendente de aprovação da administração em até 72 horas.'
-          : 'Afiliação já aprovada.' });
+          ? 'AfiliaÃ§Ã£o pendente de aprovaÃ§Ã£o da administraÃ§Ã£o em atÃ© 72 horas.'
+          : 'AfiliaÃ§Ã£o jÃ¡ aprovada.' });
     }
 
     let patrocinadorId = 'admin', patrocinadorUsuario = null;
@@ -702,7 +710,7 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
       if (pai) {
         if (await profundidadeDoPatrocinador(pai.id, client) >= MAX_AFFILIATE_LEVELS) {
           await client.query('ROLLBACK');
-          return res.status(400).json({ erro: 'A rede de afiliados permite no máximo 3 níveis.' });
+          return res.status(400).json({ erro: 'A rede de afiliados permite no mÃ¡ximo 3 nÃ­veis.' });
         }
         patrocinadorId = pai.id; patrocinadorUsuario = pai.usuario;
       }
@@ -715,7 +723,7 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
     exigirUmaLinhaPersistida(afiliadoInserido, 'afiliados');
     await client.query('COMMIT');
     res.json({ ok: true, id, patrocinadorId, patrocinadorUsuario, status: 'PENDENTE',
-      mensagem: 'Cadastro recebido. Aguarde a aprovação da administração em até 72 horas.' });
+      mensagem: 'Cadastro recebido. Aguarde a aprovaÃ§Ã£o da administraÃ§Ã£o em atÃ© 72 horas.' });
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -728,7 +736,7 @@ app.get('/api/patrocinador/:usuario', limitarTentativas, wrap(async (req, res) =
   const u = normUsuario(req.params.usuario);
   if (u === 'admin' || u === ADMIN_USUARIO) return res.json({ usuario: 'admin', nome: 'Central (Administrador)' });
   const r = await q('SELECT usuario, nome FROM afiliados WHERE usuario = $1 OR lower(id) = $1', [u]);
-  if (!r.rows.length) return res.status(404).json({ erro: 'Patrocinador não encontrado.' });
+  if (!r.rows.length) return res.status(404).json({ erro: 'Patrocinador nÃ£o encontrado.' });
   res.json(r.rows[0]);
 }));
 
@@ -765,7 +773,7 @@ app.get('/api/rede', auth, wrap(async (req, res) => {
   }
 
   const eu = lista.find(a => a.usuario === req.user.usuario);
-  if (!eu) return res.status(404).json({ erro: 'Você ainda não é afiliado.' });
+  if (!eu) return res.status(404).json({ erro: 'VocÃª ainda nÃ£o Ã© afiliado.' });
   const pai = lista.find(p => p !== eu && ehFilhoDe(eu, p));
   const ganhos = (await q(`SELECT afiliado_usuario AS u, sum(comissao_patrocinador) AS total
       FROM pedidos WHERE status = 'pago' AND patrocinador_usuario = $1 GROUP BY 1`, [eu.usuario])).rows;
@@ -785,7 +793,7 @@ app.get('/api/rede', auth, wrap(async (req, res) => {
       FROM pedidos
       WHERE status = 'pago' AND patrocinador_usuario = $1 AND comissao_patrocinador > 0
       UNION ALL
-      SELECT id AS pedido_id, produto_nome, pago_em AS data, 'Avô' AS geracao,
+      SELECT id AS pedido_id, produto_nome, pago_em AS data, 'AvÃ´' AS geracao,
         comissao_avo AS valor, status_comissao_avo AS situacao
       FROM pedidos
       WHERE status = 'pago' AND avo_usuario = $1 AND comissao_avo > 0
@@ -863,7 +871,7 @@ app.patch('/api/admin/cupons/:id', auth, soAdmin, wrap(async (req, res) => {
     WHERE id = $1
     RETURNING id, ativo, data_validade, (data_validade IS NOT NULL AND data_validade < CURRENT_DATE) AS expirado`,
   [req.params.id, atualizaAtivo ? req.body.ativo : null, atualizaValidade, dataValidade]);
-  if (!result.rows.length) return res.status(404).json({ erro: 'Cupom não encontrado.' });
+  if (!result.rows.length) return res.status(404).json({ erro: 'Cupom nÃ£o encontrado.' });
   res.json({ ok: true, ...result.rows[0], data_validade: dataIso(result.rows[0].data_validade) });
 }));
 
@@ -895,7 +903,7 @@ app.put('/api/afiliado/cupom', auth, wrap(async (req, res) => {
 app.get('/api/afiliado/notificacoes', auth, wrap(async (req, res) => {
   if (req.user.perfil !== 'afiliado') return res.status(403).json({ erro: 'Acesso exclusivo.' });
   const afiliado = (await q('SELECT nome FROM afiliados WHERE usuario = $1', [req.user.usuario])).rows[0];
-  if (!afiliado) return res.status(404).json({ erro: 'Afiliado não encontrado.' });
+  if (!afiliado) return res.status(404).json({ erro: 'Afiliado nÃ£o encontrado.' });
   const notificacoes = await q('SELECT id, titulo, mensagem, data_criacao FROM notificacoes_afiliados WHERE ativa = true AND (destinatario_usuario IS NULL OR destinatario_usuario = $1) ORDER BY data_criacao DESC', [req.user.usuario]);
   const nome = txt(afiliado.nome, 100);
   const primeiroNome = nome.split(/\s+/)[0] || nome;
@@ -913,11 +921,11 @@ app.get('/api/admin/notificacoes', auth, soAdmin, wrap(async (req, res) => {
 
 app.post('/api/admin/notificacoes', auth, soAdmin, wrap(async (req, res) => {
   const titulo = txt(req.body.titulo, 255), mensagem = txt(req.body.mensagem, 10000);
-  if (!titulo || !mensagem) return res.status(400).json({ erro: 'Informe título e mensagem.' });
+  if (!titulo || !mensagem) return res.status(400).json({ erro: 'Informe tÃ­tulo e mensagem.' });
   const destinatario = normUsuario(req.body.destinatarioUsuario || '');
   if (destinatario) {
     const encontrado = await q('SELECT 1 FROM afiliados WHERE usuario = $1', [destinatario]);
-    if (!encontrado.rows.length) return res.status(404).json({ erro: 'Afiliado destinatário não encontrado.' });
+    if (!encontrado.rows.length) return res.status(404).json({ erro: 'Afiliado destinatÃ¡rio nÃ£o encontrado.' });
   }
   const result = await q('INSERT INTO notificacoes_afiliados (titulo, mensagem, destinatario_usuario) VALUES ($1, $2, $3) RETURNING id, titulo, mensagem, destinatario_usuario, data_criacao, ativa', [titulo, mensagem, destinatario || null]);
   res.status(201).json(result.rows[0]);
@@ -934,7 +942,7 @@ app.delete('/api/admin/notificacoes/:id', auth, soAdmin, wrap(async (req, res) =
 }));
 
 const { filtrarCatalogoPublicoCJ } = require('./cj-publicacao-segura');
-// O catálogo publicado fica em config.produtos, separado de importacao_urls.
+// O catÃ¡logo publicado fica em config.produtos, separado de importacao_urls.
 async function lerCatalogoSincronizado() {
   const produtos = await lerConfig('produtos', PRODUTOS_INICIAIS);
   if (!Array.isArray(produtos)) return produtos;
@@ -964,11 +972,11 @@ app.get('/api/produtos', wrap(async (req, res) => {
 }));
 
 // VITRINE UK: rotas independentes; checkout e afiliados permanecem inalterados.
-// Identidade, sacola central, referências e recuperação de senha.
+// Identidade, sacola central, referÃªncias e recuperaÃ§Ã£o de senha.
 app.use('/api/uk', require('./uk-central-routes')({pool,auth,soAdmin,jwtSecret:JWT_SECRET,limitarTentativas,adminUsuario:ADMIN_USUARIO}));
 app.use('/api/vitrine', require('./vitrine-routes')({ pool, auth, soAdmin, lerCatalogoPublico }));
 
-// CHECKOUT UK (módulo novo de homologação; NÃO substitui o checkout legado).
+// CHECKOUT UK (mÃ³dulo novo de homologaÃ§Ã£o; NÃƒO substitui o checkout legado).
 app.use('/api/checkout-uk', require('./checkout-uk-routes')({ pool, auth, lerCatalogoPublico }));
 
 app.get('/api/admin/produtos', auth, soAdmin, wrap(async (req, res) => {
@@ -997,7 +1005,7 @@ app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
     if (req.body[chave] === undefined) continue;
     const valor = Number(req.body[chave]);
     if (!Number.isFinite(valor) || valor < 0 || valor > 100) {
-      return res.status(400).json({ erro: 'Informe cada comissão entre 0% e 100%.' });
+      return res.status(400).json({ erro: 'Informe cada comissÃ£o entre 0% e 100%.' });
     }
     novasTaxas[chave] = valor;
   }
@@ -1009,14 +1017,14 @@ app.put('/api/config', auth, soAdmin, wrap(async (req, res) => {
   };
   if (Object.keys(novasTaxas).length
     && taxasFinais.taxaComissao + taxasFinais.taxaPatrocinador + taxasFinais.taxaAvo > 100) {
-    return res.status(400).json({ erro: 'A soma das comissões não pode ultrapassar 100%.' });
+    return res.status(400).json({ erro: 'A soma das comissÃµes nÃ£o pode ultrapassar 100%.' });
   }
 
   let valorMinimo;
   if (req.body.valorMinimoSaque !== undefined) {
     valorMinimo = Number(req.body.valorMinimoSaque);
     if (!Number.isFinite(valorMinimo) || valorMinimo < 0) {
-      return res.status(400).json({ erro: 'Informe um valor mínimo de saque válido.' });
+      return res.status(400).json({ erro: 'Informe um valor mÃ­nimo de saque vÃ¡lido.' });
     }
   }
 
@@ -1044,7 +1052,7 @@ app.post('/api/admin/afiliados/:id/aprovar', auth, soAdmin, wrap(async (req, res
     SET status = 'APROVADO', aprovado_em = now()
     WHERE id = $1
     RETURNING id, usuario, nome, status, aprovado_em, aprovacao_ate`, [req.params.id]);
-  if (!result.rows.length) return res.status(404).json({ erro: 'Afiliado não encontrado.' });
+  if (!result.rows.length) return res.status(404).json({ erro: 'Afiliado nÃ£o encontrado.' });
   res.json({ ok: true, afiliado: result.rows[0], mensagem: 'Afiliado aprovado com sucesso.' });
 }));
 
@@ -1148,13 +1156,13 @@ app.post('/api/admin/afiliados/:id/pagar', auth, soAdmin, wrap(async (req, res) 
     const afiliado = await client.query('SELECT usuario FROM afiliados WHERE id = $1 FOR UPDATE', [req.params.id]);
     if (!afiliado.rows.length) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ erro: 'Afiliado não encontrado.' });
+      return res.status(404).json({ erro: 'Afiliado nÃ£o encontrado.' });
     }
 
     const resultado = await liquidarComissoesAfiliado(client, afiliado.rows[0].usuario, valorMinimo, dataLimite);
     if (resultado.elegivel > 0 && resultado.elegivel < valorMinimo) {
       await client.query('ROLLBACK');
-      return res.status(409).json({ erro: `O saldo elegível está abaixo do mínimo de R$ ${valorMinimo.toFixed(2)}.` });
+      return res.status(409).json({ erro: `O saldo elegÃ­vel estÃ¡ abaixo do mÃ­nimo de R$ ${valorMinimo.toFixed(2)}.` });
     }
 
     await client.query('COMMIT');
@@ -1179,44 +1187,66 @@ app.delete('/api/admin/contas/:usuario', auth, soAdmin, wrap(async (req, res) =>
   res.json({ ok: true });
 }));
 
-// Fila de URLs: apenas registra e acompanha importação. Não publica produtos sem dados verificados.
+// Fila de URLs: apenas registra e acompanha importaÃ§Ã£o. NÃ£o publica produtos sem dados verificados.
 const bulkImport = require('./bulk-import-routes');
-app.use('/api/admin/importacao', auth, soAdmin, bulkImport(pool));
-// Aprovação manual: somente administrador, sem publicação automática.
-app.use('/api/admin/publicacao', auth, soAdmin, require('./aprovacao-manual-routes')(pool));
-// Publicação e atualização automáticas, com configuração persistente no Neon.
-app.use('/api/admin/automacao', auth, soAdmin, require('./automacao-cronjob')(pool));
-app.use('/api/admin/precificacao', auth, soAdmin, require('./precificacao-central').createPricing(pool));
+function bloquearOperacoesExternasLocal(req, res, next) {
+  if (!LOCAL_SAFE_MODE) return next();
+  return res.status(423).json({ erro: 'Operacao bloqueada no modo local seguro; nenhum fornecedor ou robo externo e acionado.' });
+}
 
-// Integração oficial CJ Dropshipping (isolada da Garimpagem AliExpress).
-app.use('/api/admin/cj', auth, soAdmin, require('./cj-dropshipping-routes')(pool));
+app.use('/api/admin/importacao', auth, soAdmin, (req, res, next) => {
+  if (LOCAL_SAFE_MODE && req.method !== 'GET') return bloquearOperacoesExternasLocal(req, res, next);
+  next();
+}, bulkImport(pool));
+// AprovaÃ§Ã£o manual: somente administrador, sem publicaÃ§Ã£o automÃ¡tica.
+app.use('/api/admin/publicacao', auth, soAdmin, (req, res, next) => {
+  if (LOCAL_SAFE_MODE && req.method !== 'GET') return bloquearOperacoesExternasLocal(req, res, next);
+  next();
+}, require('./aprovacao-manual-routes')(pool));
+// PublicaÃ§Ã£o e atualizaÃ§Ã£o automÃ¡ticas, com configuraÃ§Ã£o persistente no Neon.
+app.use('/api/admin/automacao', auth, soAdmin, (req, res, next) => {
+  if (LOCAL_SAFE_MODE && req.method !== 'GET') return bloquearOperacoesExternasLocal(req, res, next);
+  next();
+}, LOCAL_SAFE_MODE ? express.Router() : require('./automacao-cronjob')(pool));
+app.use('/api/admin/precificacao', auth, soAdmin, (req, res, next) => {
+  if (LOCAL_SAFE_MODE && req.method !== 'GET') return bloquearOperacoesExternasLocal(req, res, next);
+  next();
+}, require('./precificacao-central').createPricing(pool));
 
-// Canal separado para a Garimpagem local: chave de serviço, nunca JWT de cliente.
-// A chave fica somente nas variáveis do Render e no computador do operador.
+// IntegraÃ§Ã£o oficial CJ Dropshipping (isolada da Garimpagem AliExpress).
+app.use('/api/admin/cj', auth, soAdmin, (req, res, next) => {
+  const podeConsultarFornecedor = /^(\/categorias|\/variantes(?:\/|$)|\/frete(?:\/|$)|\/cambio(?:\/|$)|\/sincronizar-aprovados|\/importar|\/automacao(?:\/|$)|\/reprecificacao\/(?:consultar|variantes|selecionar-variante)(?:\/|$))/.test(req.path);
+  if (LOCAL_SAFE_MODE && (req.method !== 'GET' || podeConsultarFornecedor)) return bloquearOperacoesExternasLocal(req, res, next);
+  next();
+}, require('./cj-dropshipping-routes')(pool, { safeMode: LOCAL_SAFE_MODE }));
+
+// Canal separado para a Garimpagem local: chave de serviÃ§o, nunca JWT de cliente.
+// A chave fica somente nas variÃ¡veis do Render e no computador do operador.
 const { timingSafeEqual } = require('crypto');
 function autenticarGarimpagem(req, res, next) {
   const expected = process.env.GARIMPAGEM_API_KEY || '';
   const provided = req.get('X-Garimpagem-Key') || '';
   if (expected.length < 32 || provided.length > 512 || !provided) {
-    return res.status(401).json({ erro: 'Chave de integração ausente ou não configurada.' });
+    return res.status(401).json({ erro: 'Chave de integraÃ§Ã£o ausente ou nÃ£o configurada.' });
   }
   const a = Buffer.from(expected, 'utf8');
   const b = Buffer.from(provided, 'utf8');
   if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    return res.status(401).json({ erro: 'Chave de integração inválida.' });
+    return res.status(401).json({ erro: 'Chave de integraÃ§Ã£o invÃ¡lida.' });
   }
   req.user = { usuario: 'garimpagem_local', perfil: 'integracao' };
   next();
 }
 const rotasGarimpagem = bulkImport(pool);
 app.use('/api/garimpagem', autenticarGarimpagem, (req, res, next) => {
+  if (LOCAL_SAFE_MODE) return bloquearOperacoesExternasLocal(req, res, next);
   if (req.method !== 'POST' || !['/lotes', '/captura-local'].includes(req.path)) {
-    return res.status(404).json({ erro: 'Rota indisponível para integração.' });
+    return res.status(404).json({ erro: 'Rota indisponÃ­vel para integraÃ§Ã£o.' });
   }
   next();
 }, rotasGarimpagem);
 
-app.use('/api', (req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
+app.use('/api', (req, res) => res.status(404).json({ erro: 'Rota nÃ£o encontrada.' }));
 app.use((err, req, res, next) => {
   console.error(`Erro na API ${req.method} ${req.originalUrl}:`, err);
   res.status(500).json({ erro: 'Erro interno no servidor. Tente novamente.' });

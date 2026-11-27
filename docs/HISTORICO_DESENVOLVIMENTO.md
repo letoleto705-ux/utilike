@@ -111,3 +111,43 @@
 **Banco/pagamentos:** Nenhum SQL, pagamento, commit, push ou deploy foi executado.
 **Testes:** `node --check`, validação dos scripts inline, `npm.cmd run check`, testes integrados de afiliados e `git diff --check`.
 **Situação:** Preparado para revisão local.
+
+## Registro — inicializador local seguro 2026-11-27
+
+**Gatilho:** preparação do ambiente local Windows 10.
+**Solicitação:** Criar um iniciador para abrir a Uti Like em `http://localhost:3000` usando exclusivamente o PostgreSQL local `127.0.0.1:5432/utilike_local`, sem expor senha, sem migrar banco e sem executar o servidor durante a preparação.
+**Diagnóstico:** O `server.js` carrega rotas operacionais e os módulos CJ, cronjob e reprecificação criavam timers de agendamento durante o bootstrap. Também havia endpoints administrativos capazes de importar, consultar fornecedor, sincronizar e publicar.
+**Arquivos criados:** `INICIAR_UTI_LIKE_LOCAL.bat`.
+**Arquivos modificados:** `server.js`, `cj-dropshipping-routes.js`, `cj-reprecificacao.js` e este histórico.
+**Arquivos excluídos:** Nenhum.
+**Banco/dados:** Nenhuma migração, exclusão, SQL manual, consulta ao Neon, alteração de produção ou pagamento executado. O inicializador não altera `.env`.
+**Proteção local:** `UTI_LIKE_LOCAL_SAFE_MODE=true` desliga os timers de cronjob, sincronização CJ e reprecificação CJ; operações não-GET dos módulos de importação, publicação, automação, precificação, CJ e garimpagem são bloqueadas com HTTP 423 durante a execução local.
+**Credenciais:** O BAT solicita as senhas com `Read-Host -AsSecureString`, não grava senha em arquivo e cria `DATABASE_URL` em memória com host local, banco local e SSL desabilitado. O segredo JWT é efêmero por execução.
+**Testes executados:** `node --check` nos módulos JavaScript modificados e `git diff --check`; inspeção textual do BAT sem executá-lo.
+**Resultado:** Preparação concluída e não executada; não houve inicialização do servidor, abertura de conexão PostgreSQL ou homologação do fluxo.
+**Commit/Push/Deploy:** Não realizados.
+**Situação:** Concluído quanto à preparação; pendente executar manualmente o BAT e validar o ambiente local.
+
+## Registro — credenciais locais persistentes com DPAPI 2026-11-27
+
+**Gatilho:** inicialização local automática da Uti Like.
+**Solicitação:** Evitar novas perguntas de senha no iniciador, armazenando as credenciais protegidas e oferecendo redefinição manual.
+**Backup:** O BAT anterior foi preservado fora do projeto em `%LOCALAPPDATA%\UtiLikeLocal\backups\` antes da modificação.
+**Arquivos criados:** `REDEFINIR_CREDENCIAIS_UTI_LIKE_LOCAL.bat`.
+**Arquivos modificados:** `INICIAR_UTI_LIKE_LOCAL.bat` e este histórico.
+**Proteção:** As senhas são convertidas com DPAPI via `ConvertFrom-SecureString`, vinculadas ao usuário Windows atual e armazenadas fora do projeto em `%LOCALAPPDATA%\UtiLikeLocal\credentials.json`.
+**Redefinição:** Executar `REDEFINIR_CREDENCIAIS_UTI_LIKE_LOCAL.bat` quando uma senha for alterada; o fluxo solicita novamente as credenciais e substitui o arquivo protegido.
+**Banco/ambiente:** Mantidos `127.0.0.1:5432/utilike_local`, `PGSSLMODE=disable`, porta 3000 e `UTI_LIKE_LOCAL_SAFE_MODE=true`. Nenhuma migração, alteração de registro, conexão ao banco, Neon, Render, Cronjob ou robô foi executada.
+**Testes:** Inspeção do BAT, verificação de ausência de senha literal e `git diff --check`; o servidor não foi iniciado.
+**Situação:** Preparado para inicialização automática; ainda não homologado em execução.
+
+## Registro — organização do controle de código-fonte 2026-11-27
+
+**Gatilho:** organização do Git do projeto Uti Like.
+**Solicitação:** Consolidar o `.gitignore`, preservar `package-lock.json`, não apagar nem reverter alterações e revisar as proteções de desenvolvimento local sem executar operações Git de staging ou publicação.
+**Arquivo modificado:** `.gitignore`.
+**Revisão realizada:** `server.js`, `cj-dropshipping-routes.js` e `cj-reprecificacao.js` foram revisados estaticamente. O modo seguro só é ativado com `UTI_LIKE_LOCAL_SAFE_MODE=true`; sem essa variável, o comportamento de produção permanece no caminho normal. Hosts locais usam SSL desabilitado e hosts externos continuam usando SSL.
+**Proteção de arquivos:** `node_modules/`, ambientes `.env`, backups e temporários passaram a ser ignorados; `package-lock.json`, migrations e arquivos reais do projeto permanecem elegíveis para versionamento.
+**Testes:** `npm.cmd run check`, `git diff --check` e `git check-ignore` para confirmar as regras e as exceções.
+**Git:** Nenhum `git add`, commit, push, deploy, Neon ou Render foi executado.
+**Situação:** Concluído; staging futuro deve ser seletivo e revisar as alterações preexistentes de `server.js` antes do commit.

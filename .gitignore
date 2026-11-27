@@ -1,27 +1,41 @@
-.env
-dados_garimpagem
-__pycache__
-Utilike_Garimpagem_Pausa_Retomada
-capitura manual
-dados_garimpagem
-.env
-.env.*
-**/.env
-**/.env.*robo-copy/.venv/
-**/__pycache__/
-*.pyc
+# Node.js dependencies and generated logs
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Credentials and local environment files
 .env
 .env.*
 !.env.example
+!**/.env.example
+
+# Local data, backups, and operator artifacts
+dados_garimpagem/
+Utilike_Garimpagem_Pausa_Retomada/
+capitura manual/
 robo-copy/logs/
 robo-copy/saidas/
-.env
-.env.*
-!.env.example
-**/.env
-**/.env.*
-!**/.env.example
+server.js.backup-local
+*.bak
+*.backup
+*.backup-*
+*.old
+
+# Python environments and caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
 robo-copy/.venv/
+
+# Temporary/editor files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 
 
 

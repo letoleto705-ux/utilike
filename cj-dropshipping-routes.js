@@ -13,7 +13,7 @@ const BASE='https://developers.cjdropshipping.com/api2.0/v1';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const httpsUrl=x=>{try{const u=new URL(String(x));return u.protocol==='https:'?u.href:null}catch{return null}};
 const roundUp=n=>Math.ceil((n-1e-9)*100)/100;
-function createCJ(pool){
+function createCJ(pool, { safeMode = false } = {}){
  const r=Router(); let token=null, expiry=0, busy=false, last={executando:false,mensagem:'Aguardando importação'};
   let syncBusy=false, lastSync={mensagem:'Aguardando sincronização PT-BR'};
   const previewCache=new Map();
@@ -445,10 +445,14 @@ function createCJ(pool){
   r.post('/automacao/executar-agora',async(req,res)=>{try{const cfg=await schedule();const x=await startImport(cfg,'manual');res.status(x.iniciado?202:409).json(x)}catch(e){res.status(400).json({erro:e.message})}});
   // Agendamento persistido no Neon, com reserva atômica do próximo horário.
   // Sincroniza após aprovação gravada pelo Robô Tradutor, sem exigir nova importação CJ.
+  if (safeMode) {
+    r.use('/reprecificacao',require('./cj-reprecificacao')(pool,{call, safeMode}));
+    return r;
+  }
   const syncTimer=setInterval(()=>{syncNow().catch(e=>console.error('[CJ PT-BR] sync:',e.message));},60000);syncTimer.unref?.();
   const timer=setInterval(async()=>{try{const cfg=await schedule();if(!cfg.ativo||busy||!cfg.proximaExecucao||Date.parse(cfg.proximaExecucao)>Date.now())return;const next=new Date(Date.now()+cfg.intervaloHoras*3600000).toISOString();const claimed=await pool.query(`UPDATE config SET valor=jsonb_set(valor,'{proximaExecucao}',to_jsonb($2::text),true) WHERE chave=$1 AND (valor->>'ativo')::boolean=true AND (valor->>'proximaExecucao')::timestamptz<=NOW() RETURNING chave`,[SCHEDULE_KEY,next]);if(claimed.rowCount){try{await startImport(cfg,'agendado')}catch(e){console.error('CJ automático:',e.message)}}}catch(e){console.error('CJ scheduler:',e.message)}},60000);timer.unref?.();
  // Rotas da REPRECIFICAÇÃO CJ — módulo isolado, não interfere na importação.
- r.use('/reprecificacao',require('./cj-reprecificacao')(pool,{call}));
+ r.use('/reprecificacao',require('./cj-reprecificacao')(pool,{call, safeMode}));
  return r;
 }
 module.exports=createCJ;

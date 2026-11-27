@@ -53,7 +53,7 @@ function encontrarVariante(variants,produto,meta){
  }
  return {variante:null,criterio:'multiplas_sem_correspondencia'};
 }
-function createCJRepricing(pool,{call}){
+function createCJRepricing(pool,{call, safeMode = false}){
  const r=Router();let running=false;
  let ready;
  const ensure=()=>{
@@ -414,7 +414,7 @@ function createCJRepricing(pool,{call}){
    const x=await pool.query('SELECT * FROM public.cj_reprecificacao_historico WHERE produto_id=$1 ORDER BY registrado_em DESC LIMIT 30',[req.params.id]);res.json({itens:x.rows});
  }catch(e){res.status(500).json({erro:errMsg(e)})}});
  // Verificação automática do agendamento a cada minuto, mesmo sem painel aberto.
- const timer=setInterval(async()=>{
+ const timer=safeMode ? null : setInterval(async()=>{
    if(running)return;
    try{await ensure();const a=await configGet(KEY_AGENDA,AGENDA_DEFAULT);
      if(!a.ativo||!a.proximaExecucao||Date.parse(a.proximaExecucao)>Date.now())return;
@@ -423,7 +423,7 @@ function createCJRepricing(pool,{call}){
      await configPut(KEY_AGENDA,{...a,proximaExecucao:next});
    }catch(e){console.error('[CJ reprecificação] agendamento:',errMsg(e))}
  },60000);
- timer.unref?.();
+ timer?.unref?.();
  return r;
 }
 module.exports=createCJRepricing;
