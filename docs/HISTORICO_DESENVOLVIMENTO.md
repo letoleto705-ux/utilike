@@ -90,6 +90,17 @@
 **Resultado:** Verificações passaram; falta homologação visual autenticada no navegador local.
 **Situação:** Preparado para revisão local.
 
+## Registro — aprovação pendente e gerência de afiliados 2026-11-26
+
+**Gatilho:** AFILIADOS.
+**Solicitação:** Criar ID automático, manter hierarquia de até três gerações, deixar novos afiliados pendentes por até 72 horas e adicionar aprovação/busca na Gerência de Afiliados.
+**Diagnóstico:** O cadastro gerava ID e patrocinador, mas ativava imediatamente; a gerência não possuía aprovação nem seleção dinâmica para recuperação/comunicados.
+**Arquivos modificados:** `server.js`, `public/gerencia-afiliados.html`, `public/gerencia-afiliados-uk.js`.
+**Comissões:** Nenhuma fórmula ou rotina de cálculo central foi alterada.
+**Banco/pagamentos:** Nenhum SQL foi executado; nenhuma cobrança, commit, push ou deploy foi executado. Foram apenas preparadas garantias de colunas no bootstrap existente.
+**Testes:** `node --check`, validação inline, `npm.cmd run check`, testes integrados de afiliados e `git diff --check`.
+**Situação:** Preparado para revisão local e aplicação controlada do schema no ambiente autorizado.
+
 ## Registro — persistência da referência do afiliado autenticado 2026-11-26
 
 **Gatilho:** AFILIADOS e VITRINE.

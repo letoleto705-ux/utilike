@@ -224,7 +224,8 @@ const mapAf = r => {
   const direta = dinheiro(r.direta), rede = dinheiro(r.rede);
   return {
     id: r.id, usuario: r.usuario, nome: r.nome, email: r.email, cpf: r.cpf, pix: r.pix, telefone: r.telefone || '',
-    patrocinadorId: r.patrocinador_id, criadoEm: r.criado_em,
+    patrocinadorId: r.patrocinador_id, criadoEm: r.criado_em, status: r.status || 'APROVADO',
+    aprovadoEm: r.aprovado_em || null, aprovacaoAte: r.aprovacao_ate || null,
     vendasDiretas: Number(r.vendas) || 0, vendasRede: Number(r.vendas_rede) || 0,
     comissaoDireta: direta, comissaoRede: rede, comissaoTotal: dinheiro(direta + rede),
     comissaoDiretaPendente: dinheiro(r.direta_pendente), comissaoRedePendente: dinheiro(r.rede_pendente),
@@ -291,7 +292,12 @@ async function afiliadosComComissao() {
     ) pn ON pn.u = a.usuario
     ORDER BY a.criado_em, a.id`, [dataInicioMesBrasil()]);
   const lista = r.rows.map(mapAf);
-  lista.forEach(a => { a.filhosDiretos = lista.filter(f => ehFilhoDe(f, a)).length; });
+  lista.forEach(a => {
+    a.filhosDiretos = lista.filter(f => ehFilhoDe(f, a)).length;
+    const pai = lista.find(p => p !== a && ehFilhoDe(a, p));
+    a.patrocinadorUsuario = pai?.usuario || 'admin';
+    a.patrocinadorNome = pai?.nome || 'Central (Administrador)';
+  });
   return lista;
 }
 
@@ -348,6 +354,9 @@ async function iniciarBanco() {
   await q('ALTER TABLE contas ADD COLUMN IF NOT EXISTS trocar_senha boolean NOT NULL DEFAULT false');
   await q('ALTER TABLE contas ADD COLUMN IF NOT EXISTS temp_expira timestamptz');
   await q("ALTER TABLE afiliados ADD COLUMN IF NOT EXISTS telefone text NOT NULL DEFAULT ''");
+  await q("ALTER TABLE afiliados ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'APROVADO'");
+  await q('ALTER TABLE afiliados ADD COLUMN IF NOT EXISTS aprovado_em timestamptz');
+  await q('ALTER TABLE afiliados ADD COLUMN IF NOT EXISTS aprovacao_ate timestamptz');
 
   await q(`CREATE TABLE IF NOT EXISTS pedidos (
     id text PRIMARY KEY, afiliado_usuario text, produto_id text NOT NULL,
@@ -410,6 +419,7 @@ async function iniciarBanco() {
     data_criacao timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ativa boolean NOT NULL DEFAULT true
   )`);
+  await q('ALTER TABLE notificacoes_afiliados ADD COLUMN IF NOT EXISTS destinatario_usuario text');
 
   await q('ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_original numeric(12,2) NOT NULL DEFAULT 0');
   await q("ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_codigo text NOT NULL DEFAULT ''");
@@ -589,15 +599,16 @@ app.post('/api/registrar', limitarTentativas, wrap(async (req, res) => {
         }
       }
       const id = 'AF-' + usuario.toUpperCase();
-      const afiliadoInserido = await client.query(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id)
-                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING usuario`,
+      const afiliadoInserido = await client.query(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id, status, aprovacao_ate)
+                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'PENDENTE',now()+interval '72 hours') RETURNING usuario`,
         [id, usuario, nome, email, cpf, pix, telefone, senhaHash, patrocinadorId]);
       exigirUmaLinhaPersistida(afiliadoInserido, 'afiliados');
       await client.query('COMMIT');
       const tokenCadastro=gerarToken(usuario,'afiliado');atribuirCookieLogin(req,res,tokenCadastro);return res.json({
         token: tokenCadastro,
         user: dadosUsuario({ usuario, nome, email, cpf, pix, telefone }, 'afiliado'),
-        id, patrocinadorId, patrocinadorUsuario
+      id, patrocinadorId, patrocinadorUsuario, status: 'PENDENTE', aprovacaoAte: new Date(Date.now()+72*60*60*1000).toISOString(),
+      mensagem: 'Cadastro recebido. Aguarde a aprovação da administração em até 72 horas.'
       });
     }
 
@@ -631,6 +642,9 @@ app.post('/api/login', limitarTentativas, wrap(async (req, res) => {
   const row = r.rows[0];
   if (!row || !(await bcrypt.compare(senha, row.senha_hash))) {
     return res.status(401).json({ erro: 'Usuário ou senha incorretos.' });
+  }
+  if (perfil === 'afiliado' && String(row.status || 'APROVADO').toUpperCase() !== 'APROVADO') {
+    return res.status(403).json({ erro: 'Cadastro de afiliado pendente de aprovação da administração em até 72 horas.', status: row.status || 'PENDENTE', aprovacaoAte: row.aprovacao_ate || null });
   }
 
   const flag = (await q('SELECT trocar_senha, temp_expira FROM contas WHERE usuario = $1', [row.usuario])).rows[0] || {};
@@ -669,7 +683,10 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
       await client.query('UPDATE afiliados SET nome=$2, email=$3, cpf=$4, pix=$5, telefone=$6 WHERE usuario=$1', [usuario, nome, email, cpf, pix, telefone]);
       const patrocinadorUsuario = await usuarioDoPatrocinador(existente.patrocinador_id, client);
       await client.query('COMMIT');
-      return res.json({ ok: true, id: existente.id, patrocinadorId: existente.patrocinador_id, patrocinadorUsuario });
+      return res.json({ ok: true, id: existente.id, patrocinadorId: existente.patrocinador_id, patrocinadorUsuario,
+        status: existente.status || 'APROVADO', mensagem: existente.status === 'PENDENTE'
+          ? 'Afiliação pendente de aprovação da administração em até 72 horas.'
+          : 'Afiliação já aprovada.' });
     }
 
     let patrocinadorId = 'admin', patrocinadorUsuario = null;
@@ -692,12 +709,13 @@ app.post('/api/afiliar', auth, wrap(async (req, res) => {
     }
 
     const id = 'AF-' + usuario.toUpperCase();
-    const afiliadoInserido = await client.query(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id)
-                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING usuario`,
+    const afiliadoInserido = await client.query(`INSERT INTO afiliados (id, usuario, nome, email, cpf, pix, telefone, senha_hash, patrocinador_id, status, aprovacao_ate)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'PENDENTE',now()+interval '72 hours') RETURNING usuario`,
       [id, usuario, nome, email, cpf, pix, telefone, conta.senha_hash, patrocinadorId]);
     exigirUmaLinhaPersistida(afiliadoInserido, 'afiliados');
     await client.query('COMMIT');
-    res.json({ ok: true, id, patrocinadorId, patrocinadorUsuario });
+    res.json({ ok: true, id, patrocinadorId, patrocinadorUsuario, status: 'PENDENTE',
+      mensagem: 'Cadastro recebido. Aguarde a aprovação da administração em até 72 horas.' });
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -878,7 +896,7 @@ app.get('/api/afiliado/notificacoes', auth, wrap(async (req, res) => {
   if (req.user.perfil !== 'afiliado') return res.status(403).json({ erro: 'Acesso exclusivo.' });
   const afiliado = (await q('SELECT nome FROM afiliados WHERE usuario = $1', [req.user.usuario])).rows[0];
   if (!afiliado) return res.status(404).json({ erro: 'Afiliado não encontrado.' });
-  const notificacoes = await q('SELECT id, titulo, mensagem, data_criacao FROM notificacoes_afiliados WHERE ativa = true ORDER BY data_criacao DESC');
+  const notificacoes = await q('SELECT id, titulo, mensagem, data_criacao FROM notificacoes_afiliados WHERE ativa = true AND (destinatario_usuario IS NULL OR destinatario_usuario = $1) ORDER BY data_criacao DESC', [req.user.usuario]);
   const nome = txt(afiliado.nome, 100);
   const primeiroNome = nome.split(/\s+/)[0] || nome;
   res.json(notificacoes.rows.map(n => ({
@@ -889,14 +907,19 @@ app.get('/api/afiliado/notificacoes', auth, wrap(async (req, res) => {
 }));
 
 app.get('/api/admin/notificacoes', auth, soAdmin, wrap(async (req, res) => {
-  const result = await q('SELECT id, titulo, mensagem, data_criacao, ativa FROM notificacoes_afiliados ORDER BY data_criacao DESC');
+  const result = await q('SELECT id, titulo, mensagem, destinatario_usuario, data_criacao, ativa FROM notificacoes_afiliados ORDER BY data_criacao DESC');
   res.json(result.rows);
 }));
 
 app.post('/api/admin/notificacoes', auth, soAdmin, wrap(async (req, res) => {
   const titulo = txt(req.body.titulo, 255), mensagem = txt(req.body.mensagem, 10000);
   if (!titulo || !mensagem) return res.status(400).json({ erro: 'Informe título e mensagem.' });
-  const result = await q('INSERT INTO notificacoes_afiliados (titulo, mensagem) VALUES ($1, $2) RETURNING id, titulo, mensagem, data_criacao, ativa', [titulo, mensagem]);
+  const destinatario = normUsuario(req.body.destinatarioUsuario || '');
+  if (destinatario) {
+    const encontrado = await q('SELECT 1 FROM afiliados WHERE usuario = $1', [destinatario]);
+    if (!encontrado.rows.length) return res.status(404).json({ erro: 'Afiliado destinatário não encontrado.' });
+  }
+  const result = await q('INSERT INTO notificacoes_afiliados (titulo, mensagem, destinatario_usuario) VALUES ($1, $2, $3) RETURNING id, titulo, mensagem, destinatario_usuario, data_criacao, ativa', [titulo, mensagem, destinatario || null]);
   res.status(201).json(result.rows[0]);
 }));
 
@@ -1014,6 +1037,15 @@ app.get('/api/admin/contas', auth, soAdmin, wrap(async (req, res) => {
 
 app.get('/api/afiliados', auth, soAdmin, wrap(async (req, res) => {
   res.json(await afiliadosComComissao());
+}));
+
+app.post('/api/admin/afiliados/:id/aprovar', auth, soAdmin, wrap(async (req, res) => {
+  const result = await q(`UPDATE afiliados
+    SET status = 'APROVADO', aprovado_em = now()
+    WHERE id = $1
+    RETURNING id, usuario, nome, status, aprovado_em, aprovacao_ate`, [req.params.id]);
+  if (!result.rows.length) return res.status(404).json({ erro: 'Afiliado não encontrado.' });
+  res.json({ ok: true, afiliado: result.rows[0], mensagem: 'Afiliado aprovado com sucesso.' });
 }));
 
 async function liquidarComissoesAfiliado(client, usuario, valorMinimo, dataLimite) {
