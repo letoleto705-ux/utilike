@@ -89,3 +89,14 @@
 **Testes:** `node --check`, validação dos scripts inline, `npm.cmd run check`, testes integrados de afiliados e `git diff --check`.
 **Resultado:** Verificações passaram; falta homologação visual autenticada no navegador local.
 **Situação:** Preparado para revisão local.
+
+## Registro — persistência da referência do afiliado autenticado 2026-11-26
+
+**Gatilho:** AFILIADOS e VITRINE.
+**Solicitação:** Manter a referência do usuário afiliado autenticado visível na barra de endereço durante a navegação, preservando prioridade da URL e fallback de 15 dias.
+**Diagnóstico:** A referência dependia apenas de parâmetros presentes na URL ou do estado temporário salvo; quando ambos desapareciam, a navegação mostrava somente o nome da página.
+**Arquivo modificado:** `public/vitrine-uk.js`.
+**Alteração:** Após consultar a sessão autenticada, o frontend reconstrói `?afiliado=usuario` apenas para afiliados, sem substituir `ref` ou `afiliado` explícitos na URL.
+**Banco/pagamentos:** Nenhum SQL, pagamento, commit, push ou deploy foi executado.
+**Testes:** `node --check`, validação dos scripts inline, `npm.cmd run check`, testes integrados de afiliados e `git diff --check`.
+**Situação:** Preparado para revisão local.
