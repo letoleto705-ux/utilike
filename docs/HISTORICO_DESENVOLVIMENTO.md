@@ -78,3 +78,14 @@
 **Testes:** `node --check` nos JavaScripts alterados, validação dos scripts inline de `index.html` e `login.html`, `npm.cmd run check`, `node --test tests/entrega-integrada.test.js tests/afiliados-3-niveis.test.js` e `git diff --check`.
 **Resultado:** Verificações passaram; homologação visual/autenticada local ainda é necessária.
 **Situação:** Preparado para revisão local; não homologado em produção.
+
+## Registro — pós-cadastro e patrocinador direto 2026-11-26
+
+**Gatilho:** AFILIADOS.
+**Solicitação:** Exigir login próprio após cadastro de afiliado, limpar link de produto e destacar o patrocinador direto, sem vitrine exclusiva, SQL, pagamentos, commit, push ou deploy.
+**Diagnóstico:** O cadastro retornava usuário autenticado e redirecionava diretamente ao painel; o painel não possuía limpeza do link específico nem saudação com patrocinador.
+**Arquivos modificados:** `public/login-uk.js`, `public/afiliados.html`, `public/afiliados-uk.js`.
+**Banco/pagamentos:** Nenhum SQL, pagamento, commit, push ou deploy foi executado.
+**Testes:** `node --check`, validação dos scripts inline, `npm.cmd run check`, testes integrados de afiliados e `git diff --check`.
+**Resultado:** Verificações passaram; falta homologação visual autenticada no navegador local.
+**Situação:** Preparado para revisão local.
